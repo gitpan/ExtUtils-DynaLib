@@ -1,24 +1,25 @@
-#ifdef HAVE_ALLOCA_H
-#include <alloca.h>
-#endif
+/* cdecl.h is generated when you run `perl Makefile.PL DECL=cdecl' */
+#include "cdecl.h"
 
-#ifdef __BORLANDC__
-#include <malloc.h>
-#endif  /* __BORLANDC__ */
-
+/*
+ * Convert Perl sub args to C args and pass them to (*func)().
+ */
 static int
 cdecl_pray(ax, items, func)
-I32 ax;
+I32 ax;		/* used by the ST() macro */
 I32 items;
 void *func;
 {
   STRLEN arg_len;
   char *arg_scalar, *arg_on_stack;
   register int i;
-#ifdef CDECL_ONE_BY_ONE
+#if CDECL_ONE_BY_ONE
 
-  /* Place C arguments on stack backwards--it's the convention. */
-  for (i = items; i-- > 1; ) {
+#if CDECL_REVERSE
+  for (i = 1; i < items; i++) {
+#else  /* ! CDECL_REVERSE */
+  for (i = items - 1; i >= 1; i--) {
+#endif  /* ! CDECL_REVERSE */
     arg_scalar = SvPV(ST(i), arg_len);
     arg_on_stack = alloca(arg_len);
     Copy(arg_scalar, arg_on_stack, arg_len, char);
@@ -30,11 +31,15 @@ void *func;
     (void) SvPV(ST(i), arg_len);
     total_arg_len += arg_len;
   }
-  arg_on_stack = alloca(total_arg_len);
-#ifdef CDECL_SUBTRACT_CURRENT
+  arg_on_stack = (char *) alloca(total_arg_len) + CDECL_ADJUST;
+#if CDECL_SUBTRACT_CURRENT
   arg_on_stack -= (sizeof ax + sizeof items + sizeof func);
 #endif  /* CDECL_SUBTRACT_CURRENT */
+#if CDECL_REVERSE
+  for (i = items - 1; i >= 1; i--) {
+#else  /* ! CDECL_REVERSE */
   for (i = 1; i < items; i++) {
+#endif  /* ! CDECL_REVERSE */
     arg_scalar = SvPV(ST(i), arg_len);
     Copy(arg_scalar, arg_on_stack, arg_len, char);
     arg_on_stack += arg_len;

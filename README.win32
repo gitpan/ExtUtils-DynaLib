@@ -1,10 +1,10 @@
 =pod
 
 This file is a Perl program that tests the ExtUtils::DynaLib package
-on Win32 platforms.  To run it after installation, type `perl
-<this-file> <sysdir>' where <sysdir> is the Windows system directory
-(the default is \WINDOWS\SYSTEM).  If successful, it will create a
-window with a message in the center.
+on Windows 95.  To run it after installation, type `perl <this-file>
+<sysdir>' where <sysdir> is the Windows system directory (the default
+is \WINDOWS\SYSTEM).  If successful, it will create a window with a
+message in the center.
 
 The program is modeled after the kind of "hello world" examples found
 in introductory books on Windows programming in C.  However, Perl
@@ -19,8 +19,8 @@ that reads C header files and lets us use preprocessor macros.  For
 now though, if you want to make direct API calls without writing
 specialized XS code, this is the best way I know how.
 
-One final note.  This is a demo/test program.  Please don't write code
-this sloppy in real life.
+One final note.  This is a demo/test program.  This is not necessarily
+good coding style.
 
 =cut
 

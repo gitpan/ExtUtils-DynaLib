@@ -6,59 +6,57 @@ dynamic libraries.  Example:
   $sinh = $libm->DeclareSub("sinh", "d", "d");
   print "The hyperbolic sine of 3 is ", &$sinh(3), "\n";
 
-	************************************************************
-	************************************************************
-	************************************************************
-	*****                                                  *****
-	*****   THIS IS ALPHA CODE!!  USE AT YOUR OWN RISK!!   *****
-	***** WHAT WORKS ON ONE MACHINE WON'T WORK ON ANOTHER! *****
-	*****                                                  *****
-	************************************************************
-	************************************************************
-	************************************************************
+	***************************************************************
+	***************************************************************
+	***************************************************************
+	*****                                                     *****
+	*****   THIS ALPHA CODE CONTAINS SYSTEM DEPENDENCIES.     *****
+	*****   IT WILL NOT WORK ON ALL COMPILERS, MACHINES, OR   *****
+	*****   OPERATING SYSTEMS.        USE AT YOUR OWN RISK.   *****
+	*****                                                     *****
+	***************************************************************
+	***************************************************************
+	***************************************************************
 
-That said, once you have unpacked the files, run the usual
 
+Included are the following packages:
+
+  ExtUtils::DynaLib            - interface to dynamic libraries
+  ExtUtils::DynaLib::Callback  - convert a perl sub into a usable
+                                     C function pointer
+  ExtUtils::DynaLib::Struct    - yet another tool for handling C
+                                     compound data structures
+
+To build this module, run the usual
+
+  gzip -dc ExtUtils-DynaLib-0.XX.tar.gz | tar xf -
+  cd ExtUtils-DynaLib-0.XX
   perl Makefile.PL
-
-and see if it complains.  At this point, various things can go wrong.
-First, your perl must be of the dynamic variety.  Be sure you answered
-"y" when Configure asked, "Do you wish to use dynamic loading?".
-
-Another thing Makefile.PL checks is whether the module has been tested
-on a machine matching your system architecture.  If not, you will see
-a message suggesting that you try this:
-
-  perl Makefile.PL DECL=cdecl
-
-(On a Sparc, use DECL=sparc instead.)  If it compiles okay, you MUST
-run
-
   make test
 
-to see if your system's calling convention really is "cdecl".
+Various things can go wrong.  First, your perl must be of the dynamic
+variety.  Be sure you answered "y" when Configure asked, "Do you wish
+to use dynamic loading?".
 
-If `make test' prints "not ok" even once (other than for failure to
-load a dynamic library), we should probably write a new calling
-convention to accommodate your system.
-
-Alternatively, if you are in a rush and just want to see it work, you
-may try `perl Makefile.PL DECL=hack30' followed by `make test'.  But
-PLEASE read the discussion of hack30 in DynaLib.pm or the
-ExtUtils::DynaLib manpage.
+The biggest issue in porting this module is your system's function
+call interface.  If Makefile.PL prints that it is using `hack30', it
+is a sign that your system is not yet supported.  Another sign of
+trouble is when `make test' prints `not ok' or `Illegal memory
+operation'.  Further documentation in pod format is in DynaLib.pm.
 
 The callback feature has sometimes caused grief in building the
-module.  If you still can't get it built and loaded, try appending
-`CALLBACKS=0' to the `perl Makefile.PL' line.  And tell me of your
-success or failure.
+module.  If Makefile.PL writes a makefile but you can't get it to
+build, try `perl Makefile.PL CALLBACKS=0' followed by `make test',
+and tell me of your success or failure.
+
 
 COPYRIGHT
 
-This file and its accompanying materials are Copyright 1997 by John
-Tobey.  They may be modified and distributed and used under the same
-conditions as Perl itself.  Of course, there is no expressed or
-implied warranty.  See the file README in the top-level Perl source
-directory for more information.
+This file and its accompanying materials are Copyright (c) 1997 by
+John Tobey.  They may be modified, distributed and used under the same
+conditions as Perl itself.  Of course, there is no express or implied
+warranty.  See the file README in the top-level Perl source directory
+for more information.
 
 Enjoy!
 jtobey@user1.channel1.com

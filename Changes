@@ -1,4 +1,4 @@
-Revision history for Perl extension CLib.
+Revision history for Perl extension ExtUtils::DynaLib (nee CLib).
 
 0.01  Thu Jun 12 01:17:41 1997
 	- original version; created by h2xs 1.18
@@ -34,8 +34,12 @@ Made compatible with perl 5.003.
 Added a few bits & pieces.
 Sun's cc is now supported (thanks to lvirden@cas.org).
 
-0.22  
+0.22  Wed Jul 30 01:12 1997
 	Renamed methods to avoid possible future keyword conflict:
 declare_sub became DeclareSub, poke became Poke, etc.  Added
 ExtUtils::DynaLib::Struct package.  Got it to work on Windows 95 with
 Borland C++ (but probably not repeatably ;-) )
+
+0.30  Mon Aug 11 00:58:55  1997
+	Added testcall configuration utility to find system
+dependencies for cdecl convention.  Rewrote some docs.

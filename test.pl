@@ -8,7 +8,7 @@
 
 BEGIN { $| = 1; print "1..8\n"; }
 END {print "not ok 1\n" unless $loaded;}
-use ExtUtils::DynaLib;
+use ExtUtils::DynaLib qw(DeclareSub);
 $loaded = 1;
 print "ok 1\n";
 
@@ -17,11 +17,17 @@ print "ok 1\n";
 eval {
     # The original name of this module was "DumpCore"...
     # ...and it was very good at it...
-    # the moral being that segmentation faults should be expected
-    # when using this code.
-    use Carp;
-    $SIG{SEGV} = sub { confess "Illegal memory operation" };
+    # the moral being that segmentation faults and the like
+    # should be expected when using this code.
+
+    $SIG{SEGV} = sub { use Carp; confess "Illegal memory operation" };
+    $SIG{ILL} = $SIG{SEGV};
 };
+
+unless (defined(&DeclareSub)) {
+  # Perl 5.003's Exporter behaved differently.
+  sub DeclareSub { &ExtUtils::DynaLib::DeclareSub }
+}
 
 $num = 2;
 sub assert {
@@ -40,15 +46,18 @@ use Config;
 $libc_arg = $Config{libc} || "-lc";
 eval { $libc = new ExtUtils::DynaLib($libc_arg); };
 
-if ($@ && ($^O eq "cygwin3295" || $^O eq "MSWin32")) {
+if ($@) {
+  if ($^O eq "cygwin3295" || $^O eq "MSWin32") {
     $libc_arg = "\\WINDOWS\\SYSTEM\\MSVCRT40.DLL";
     eval { $libc = new ExtUtils::DynaLib($libc_arg); };
     $@ && eval { $libc = new ExtUtils::DynaLib("MSVCRT40.DLL"); };
+  } elsif ($^O eq 'linux') {
+    eval { $libc = new ExtUtils::DynaLib("libc.so.6"); };
+  }
 }
 if ($@) {
     assert(0);
     die "Can't load -lc: $@", "Giving up.\n";
-    exit;
 }
 
 $libm_arg = DynaLoader::dl_findfile("-lm");
@@ -68,7 +77,7 @@ if ($@ || ! $pow) {
     warn "$0: Can't find dynamic -lm!  Skipping the math lib tests.\n";
     assert(1);
 } else {
-    $sqrt2 = &{$pow}(2, 0.5);
+    $sqrt2 = &$pow(2, 0.5);
     assert(1, $sqrt2, 2**0.5);
 }
 
@@ -77,51 +86,12 @@ $strlen = $libc->DeclareSub ({ "name" => "strlen",
 				"args" => ["p"],
 			    });
 
-# Can't do this because it results in a pack("p", constant):
-# $len = &{$strlen}("oof rab zab");
+# Can't do this in perl <= 5.00401 because it results in a
+# pack("p", constant)...
 #
-#...unless you patch the perl5.004_01 source as shown below.
-#
-# NOTE: THIS PATCH OF THE PERL SOURCE CODE IS UNTESTED, MAY INTRODUCE
-# BUGS, WILL ALLOW YOU TO WRITE PROGRAMS THAT ARE INCOMPATIBLE WITH
-# STANDARD PERL, AND IS GENERALLY NOT A GOOD IDEA TO USE IN PRODUCTION.
-# You have been warned.
-#
-<<'PATCH';
-*** pp.c	Thu Jun 12 21:11:14 1997
---- pp.c	Sun Jul  6 17:34:30 1997
-***************
-*** 3834,3840 ****
-  	case 'p':
-  	    while (len-- > 0) {
-  		fromstr = NEXTFROM;
-! 		aptr = SvPV_force(fromstr, na);	/* XXX Error if TEMP? */
-  		sv_catpvn(cat, (char*)&aptr, sizeof(char*));
-  	    }
-  	    break;
---- 3834,3851 ----
-  	case 'p':
-  	    while (len-- > 0) {
-  		fromstr = NEXTFROM;
-! 		if (fromstr == &sv_undef)
-! 		    aptr = NULL;
-! 		else {
-! 		    if (dowarn && (SvTEMP(fromstr) || SvPADTMP(fromstr)))
-! 		        warn("Attempt to pack pointer to temporary storage");
-! 		    if (SvPADTMP(fromstr))
-! 			fromstr = sv_mortalcopy(fromstr);
-! 		    if (SvPOK(fromstr) || SvNIOK(fromstr))
-! 		        aptr = SvPV(fromstr,na);
-! 		    else
-! 		        aptr = SvPV_force(fromstr, na);
-! 		}
-  		sv_catpvn(cat, (char*)&aptr, sizeof(char*));
-  	    }
-  	    break;
-PATCH
+# $len = &$strlen("oof rab zab");
 
-
-$len = &{$strlen}($tmp = "oof rab zab");
+$len = &$strlen($tmp = "oof rab zab");
 assert(1, $len, 11);
 
 sub my_sprintf {
@@ -169,17 +139,17 @@ assert(1, $got, $expected);
 # Try passing a pointer to DeclareSub.
 $fopen_ptr = DynaLoader::dl_find_symbol($libc->LibRef(), "fopen")
     or die DynaLoader::dl_error();
-$fopen = ExtUtils::DynaLib::DeclareSub ({ "ptr" => $fopen_ptr,
-			"return" => "ptr",
-			"args" => ["p", "p"] });
+$fopen = DeclareSub ({ "ptr" => $fopen_ptr,
+		       "return" => "ptr",
+		       "args" => ["p", "p"] });
 
 open TEST, ">tmp.tmp"
     or die "Can't write file tmp.tmp: $!\n";
 print TEST "a string";
 close TEST;
 
-# Can't do &{$fopen}("tmp.tmp", "r") without the above patch.
-$fp = &{$fopen}($tmp1 = "tmp.tmp", $tmp2 = "r");
+# Can't do &$fopen("tmp.tmp", "r") in perls before 5.00402.
+$fp = &$fopen($tmp1 = "tmp.tmp", $tmp2 = "r");
 if (! $fp) {
     assert(0);
 } else {
@@ -187,48 +157,49 @@ if (! $fp) {
     $fread = $libc->DeclareSub("fread", "int",
 				"P", "I", "I", "I");
     $buffer = "\0" x 4;
-    $result = &{$fread}($buffer, 1, length($buffer), $fp);
+    $result = &$fread($buffer, 1, length($buffer), $fp);
     assert($result == 4, $buffer, "a st");
     unlink "tmp.tmp";
 }
 
-if (@$ExtUtils::DynaLib::Callback::config) {
-$ptr_len = length(pack("p", $tmp = "foo"));
-sub compare_lengths {
-    # Not a model of efficiency, only functionality!!
-    my ($ppa, $ppb) = @_;
-    my $pa = unpack("P$ptr_len", pack("i", $ppa));
-    my $pb = unpack("P$ptr_len", pack("i", $ppb));
-    my $A = unpack("p", $pa);
-    my $B = unpack("p", $pb);
-    length($A) <=> length($B);
-}
-@list = qw(A bunch of elements with unique lengths);
-$array = pack("p*", @list);
+if (@$ExtUtils::DynaLib::Callback::Config) {
+    $ptr_len = length(pack("p", $tmp = "foo"));
+    sub compare_lengths {
+	# Not a model of efficiency, only a test of functionality!!
+	my ($ppa, $ppb) = @_;
+	my $pa = unpack("P$ptr_len", pack("i", $ppa));
+	my $pb = unpack("P$ptr_len", pack("i", $ppb));
+	my $A = unpack("p", $pa);
+	my $B = unpack("p", $pb);
+	length($A) <=> length($B);
+    }
+    @list = qw(A bunch of elements with unique lengths);
+    $array = pack("p*", @list);
 
-#
-# This appears to work with either \&compare_lengths or "::compare_lengths",
-# but not "compare_lengths".
-#
-$callback = new ExtUtils::DynaLib::Callback(\&compare_lengths, "i", "i", "i");
+    #
+    # This appears to work with either \&compare_lengths or
+    # "::compare_lengths", but not "compare_lengths".
+    #
+    $callback = new ExtUtils::DynaLib::Callback(\&compare_lengths, "i",
+						"i", "i");
 
-$qsort = $libc->DeclareSub("qsort", "void", "P", "I", "I", "I");
-&{$qsort}($array, scalar(@list), length($array) / @list, $callback->Ptr());
+    $qsort = $libc->DeclareSub("qsort", "void", "P", "I", "I", "I");
+    &$qsort($array, scalar(@list), length($array) / @list, $callback->Ptr());
 
-@expected = sort { length($a) <=> length($b) } @list;
-@got = unpack("p*", $array);
-assert(1, "[@got]", "[@expected]");
+    @expected = sort { length($a) <=> length($b) } @list;
+    @got = unpack("p*", $array);
+    assert(1, "[@got]", "[@expected]");
 
-# Hey!  We've got callbacks.  We've got a way to call them.
-# Who needs libraries?
-$callback = new ExtUtils::DynaLib::Callback(sub {
-    $_[0] + 10*$_[1] + 100*$_[2];
-}, "i", "i", "p", "i");
-$foo = ExtUtils::DynaLib::DeclareSub($callback->Ptr(), "i", "i", "p", "i");
+    # Hey!  We've got callbacks.  We've got a way to call them.
+    # Who needs libraries?
+    $callback = new ExtUtils::DynaLib::Callback(sub {
+	$_[0] + 10*$_[1] + 100*$_[2];
+    }, "i", "i", "p", "i");
+    $foo = DeclareSub($callback->Ptr(), "i", "i", "p", "i");
 
-$got = &{$foo}(1, $tmp = 7, 3.14);
-$expected = 371;
-assert(1, $got, $expected);
+    $got = &$foo(1, $tmp = 7, 3.14);
+    $expected = 371;
+    assert(1, $got, $expected);
 } else {
     warn("Skipping callback tests on this platform\n");
     assert(1);

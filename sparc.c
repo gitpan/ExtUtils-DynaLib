@@ -1,22 +1,24 @@
-#ifdef HAVE_ALLOCA_H
+/* alloca.h is needed with Sun's cc */
 #include <alloca.h>
-#endif
 
+/*
+ * Convert Perl sub args to C args and pass them to (*func)().
+ */
 static int
 sparc_pray(ax, items, func)
-I32 ax;
+I32 ax;		/* used by the ST() macro */
 I32 items;
-void *func;
+int (*func)();
 {
   STRLEN arg_len, chunk_len;
   char *arg_scalar, *arg_on_stack;
   int nbytes = 0;
   int pseu[6];  /* Array of first six "pseudo-arguments" */
   int check_len;
-  register int i = 1, j;
+  register int i, j;
   int stack_needed = 0;
 
-  while (i < items) {
+  for (i = 1; i < items; ) {
     arg_scalar = SvPV(ST(i), arg_len);
     i++;
     check_len = nbytes + arg_len;
@@ -36,7 +38,7 @@ void *func;
 	/* Wish I knew why we have to subtract off 4. */
 	arg_on_stack -= sizeof (int);
 	if (check_len > sizeof pseu) {
-	  /* An argument straddles the 24-byte line; part goes on stack. */
+	  /* An argument straddles the 6-word line; part goes on stack. */
 	  SvPV(ST(i), arg_len);
 	  chunk_len = check_len - sizeof pseu;
 	  Copy(&arg_scalar[arg_len - chunk_len], arg_on_stack, chunk_len, char);

@@ -170,6 +170,8 @@ va_list ap;
 
 MODULE = ExtUtils::DynaLib  PACKAGE = ExtUtils::DynaLib
 
+INCLUDE: conv.xsi
+
 void
 Poke(dest, data)
 	void *	dest
@@ -183,8 +185,6 @@ Poke(dest, data)
 	    Copy(source, dest, len, char);
 	  }
 	}
-
-INCLUDE: conv.xsi
 
 char *
 default_convention()

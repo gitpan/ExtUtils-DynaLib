@@ -6,7 +6,7 @@
 #
 package ExtUtils::DynaLib;
 
-require 5.003;  # maybe it'll work with 5.002, haven't tried.
+require 5.002;
 
 =head1 NAME
 
@@ -18,80 +18,74 @@ functions
   use ExtUtils::DynaLib;
   $lib = new ExtUtils::DynaLib( $linker_arg );
 
-  $func = $lib->declare_sub( $symbol_name
-			     [, $return_type [, @arg_types] ] );
-  $func = declare_sub( $function_pointer,
-		       [, $return_type [, @arg_types] ] );
-  $func = $lib->declare_sub( { "name"    => $symbol_name,
-				["return" => $return_type,]
-				["args"   => \@arg_types,]
-				["decl"   => $decl,]
-			      } );
-  $func = declare_sub( { "ptr" => $function_pointer,
-			 ["return" => $return_type,]
-			 ["args"   => \@arg_types,]
-			 ["decl"   => $decl,]
-			 ["libref" => $libref,]
-		       } );
+  $func = $lib->DeclareSub( $symbol_name
+			[, $return_type [, @arg_types] ] );
+  $func = DeclareSub( $function_pointer,
+			[, $return_type [, @arg_types] ] );
+  $func = $lib->DeclareSub( { "name"    => $symbol_name,
+			["return" => $return_type,]
+			["args"   => \@arg_types,]
+			["decl"   => $decl,]
+			} );
+  $func = DeclareSub( { "ptr" => $function_pointer,
+			["return" => $return_type,]
+			["args"   => \@arg_types,]
+			["decl"   => $decl,]
+			["libref" => $libref,]
+			} );
   $result = $func->( @args );
 
   $callback = new ExtUtils::DynaLib::Callback( \&my_sub,
-					       $return_type,
-					       @arg_types );
-  $callback_pointer = $callback->ptr();
+			$return_type, @arg_types );
+  $callback_pointer = $callback->Ptr();
 
 =head1 DESCRIPTION
 
 This module allows Perl programs to link with dynamic libraries and
 call their functions on the fly.
 
-The mechanics of passing arguments and returning values are,
-unfortunately, highly machine-and-OS-dependent.  Therefore,
-Makefile.PL checks the Perl configuration to verify that your
-architecture is supported.
-
-Currently, this module has been built only on i586 Linux, FreeBSD,
-Sun4 Solaris and SunOS.  It is expected to work on most Intel and many
-other platforms (at least with gcc), but the author won't change
-Makefile.PL to accept them until he has confirmation.
+The mechanics of passing arguments and returning values,
+unfortunately, depend on your machine, operating system, and compiler.
+Therefore, Makefile.PL checks the Perl configuration to verify that
+your architecture is supported.
 
 =head2 ExtUtils::DynaLib public constructor
 
 The argument to C<new> may be the file name of a shared library.
-Alternatively, a linker command-line argument (e.g., "-lc" for the C
-library) may be specified.  See DynaLoader(3) for details on how such
-arguments are mapped to file names.
+Alternatively, a linker command-line argument (e.g., "-lc") may be
+specified.  See DynaLoader(3) for details on how such arguments are
+mapped to file names.
 
 =head2 Declaring a library routine
 
 Before you can call a function in a shared library, you must specify
 its name, the return type, and the number and types of arguments it
-expects.  This is handled by C<declare_sub>.
+expects.  This is handled by C<DeclareSub>.
 
-C<ExtUtils::DynaLib::declare_sub> can be used as either an object
-method or an ordinary sub.  Furthermore, you can pass its arguments
-either in a list (what we call "positional arguments") or in a hash
-("named arguments").
+C<ExtUtils::DynaLib::DeclareSub> can be used as either an object
+method or an ordinary sub.  You can pass its arguments either in a
+list (what we call "positional arguments") or in a hash ("named
+arguments").
 
-The simplest way is to use C<declare_sub> as a method using positional
+The simplest way to use C<DeclareSub> is as a method with positional
 arguments.  This form is illustrated in the first example above and
 both examples below.  When used in this way, the first argument is a
 library function name, the second is the function return type, and the
 rest are function argument types.
 
-The arguments to C<declare_sub> are as follows:
+The arguments to C<DeclareSub> are as follows:
 
 =over 4
 
 =item C<name>
 
 The name of a function exported by C<$lib>.  This argument is ignored
-in the non-method forms of C<declare_sub>.
+in the non-method forms of C<DeclareSub>.
 
 =item C<ptr>
 
 The address of the C function.  This argument is required in the
-non-method forms of C<declare_sub>.  Either it or the C<name> must be
+non-method forms of C<DeclareSub>.  Either it or the C<name> must be
 specified in the method forms.
 
 =item C<return>
@@ -112,27 +106,28 @@ NUL-terminated string pointer.
 
 Note: you probably don't want to use "c" or "s" here, since C normally
 converts the corresponding types (C<char> and C<short>) to C<int> when
-passing them to a function.  This module does not perform such
-conversions.  Use "i" instead.  Likewise, use "I" in place of "C" or
-"S".
+passing them to a function.  The ExtUtils::DynaLib package does not
+perform such conversions.  Use "i" instead.  Likewise, use "I" in
+place of "C" or "S".
 
 =item C<decl>
 
 Allows you to specify a function's calling convention.  This is
-possible only with a named-argument form of C<declare_sub>.  See below
+possible only with a named-argument form of C<DeclareSub>.  See below
 for information about the supported calling conventions.
 
 =item C<libref>
 
 A library reference obtained from either C<DynaLoader::dl_load_file>
-or the C<ExtUtils::DynaLib::libref> method.  You must use a
-named-argument form of C<declare_sub> to specify this argument.
+or the C<ExtUtils::DynaLib::LibRef> method.  You must use a
+named-argument form of C<DeclareSub> in order to specify this
+argument.
 
 =back
 
 =head2 Calling a declared function
 
-The return value of C<declare_sub> is a code reference.  Calling
+The return value of C<DeclareSub> is a code reference.  Calling
 through it results in a call to the C function.  See perlref(1) for
 how to call subs using code references.
 
@@ -153,9 +148,9 @@ A callback's argument and return types are specified using C<pack>
 codes, as described above for library functions.  Currently, the
 return value and first argument must be interpretable as type C<int>
 or C<void>, so the only valid codes are "i" and "".  (On machines for
-which integers are the same size as pointers, "p" is allowed, too.)
-For argument positions beyond the first, the permissible types are
-"i", "p", and "d".
+which integers are the same size as pointers, "p" is allowed as a
+first argument type.)  For argument positions beyond the first, the
+permissible types are "i", "p", and "d".
 
 To enable a Perl sub to be used as a callback, you must construct an
 object of class ExtUtils::DynaLib::Callback.  The syntax is
@@ -164,19 +159,21 @@ object of class ExtUtils::DynaLib::Callback.  The syntax is
                     $ret_type, @arg_types );
 
 where C<$ret_type> and C<@arg_types> are the C<pack>-style types of
-the function return value and arguments, respectively.  The callback
-pointer is then obtained by calling C<$cb_ref-E<gt>ptr()>.
+the function return value and arguments, respectively.  Calling
+C<$cb_ref-E<gt>Ptr()> then returns a scalar whose integer value is the
+function address.  C code that calls it will end up calling
+C<&some_sub>.
 
 =head1 EXAMPLES
 
 This code loads and calls the math library function "sinh".  It
 assumes that you have a dynamic version of the math library which will
-be found by C<DynaLoader::dl_findfile("-lm")>.  If this is not the case,
+be found by C<DynaLoader::dl_findfile("-lm")>.  If this doesn't work,
 replace "-lm" with the name of your math library.
 
   use ExtUtils::DynaLib;
   $libm = new ExtUtils::DynaLib("-lm");
-  $sinh = $libm->declare_sub("sinh", "d", "d");
+  $sinh = $libm->DeclareSub("sinh", "d", "d");
   print "The hyperbolic sine of 3 is ", &{$sinh}(3), "\n";
   # The hyperbolic sine of 3 is 10.0178749274099
 
@@ -185,7 +182,7 @@ first C<n> characters of two strings:
 
   use ExtUtils::DynaLib;
   $libc = new ExtUtils::DynaLib("-lc");
-  $strncmp = $libc->declare_sub("strncmp", "i", "p", "p", "i");
+  $strncmp = $libc->DeclareSub("strncmp", "i", "p", "p", "i");
   $string1 = "foobar";
   $string2 = "foolish";
   $result = &{$strncmp}($string1, $string2, 3);  # $result is 0
@@ -202,7 +199,7 @@ command-line.  If none are given, Makefile.PL will try to choose based
 on your Perl configuration and give up if it can't guess.
 
 At run time, a calling convention may be specified using a
-named-argument form of C<declare_sub> (described above), or a default
+named-argument form of C<DeclareSub> (described above), or a default
 may be used.  The first `DECL=...' will be the default.
 
 Note that the convention must match that of the function in the
@@ -296,9 +293,9 @@ and pass the variable in its place, as in
   $strncmp->($dummy1 = "foo", $dummy2 = "bar", 3);
 
 This is related to the fact that Perl can not handle
-C<pack("p", "foo")>.  See the file "test.pl" for a patch to correct
-this behavior in the Perl source; I'm too lazy to work around it in
-this package.
+C<pack("p", "foo")>.  See the file test.pl for a patch to correct this
+behavior in the Perl source; I'm too lazy to work around it in this
+package.
 
 =head2 Callbacks
 
@@ -312,10 +309,17 @@ There are too many restrictions on what C data types may be used.  The
 techniques used to pass values to and from C functions are all very
 hackish and not officially sanctioned.
 
+=head1 TODO
+
+Fiddle with autoloading so we don't have to call DeclareSub all the
+time.  Mangle C++ function names.  Get Perl to understand C header
+files.
+
 =head1 COPYING
 
-This package is distributed under the same license as Perl itself.
-There is ABSOLUTELY NO WARRANTY.  See the file "README" in the top
+Copyright 1997 by John Tobey.  This package is distributed under the
+same license as Perl itself.  There is no expressed or implied
+warranty, since it is free software.  See the file README in the top
 level Perl source directory for details.
 
 =head1 AUTHOR
@@ -332,23 +336,22 @@ perlcall(1).
 
 use strict;
 use Carp;
-use vars qw($VERSION @ISA @EXPORT @EXPORT_OK);
-use subs qw(new libref declare_sub);
+use vars qw($VERSION @ISA @EXPORT @EXPORT_OK $DefConv);
+use subs qw(new LibRef DeclareSub);
 
 require DynaLoader;
 require Exporter;
 
 @ISA = qw(DynaLoader Exporter);
-$VERSION = '0.21';
+$VERSION = '0.22';
 
-@EXPORT = qw(declare_sub);
-@EXPORT_OK = qw(poke);
+@EXPORT = ();
+@EXPORT_OK = qw(Poke DeclareSub);
 bootstrap ExtUtils::DynaLib $VERSION, \$ExtUtils::DynaLib::Callback::config;
+$DefConv = default_convention();
 
 # Cache of loaded lib refs.  Maybe best left to DynaLoader?
 my %loaded_libs = ();
-
-# Preloaded methods go here.
 
 sub new {
     my $class = shift;
@@ -363,11 +366,11 @@ sub new {
     return $loaded_libs{$libname} = bless \$lib, $class;
 }
 
-sub libref {
+sub LibRef {
     ${$_[0]};
 }
 
-sub declare_sub {
+sub DeclareSub {
     local ($@);  # We eval $obj->isa and $obj->can for 5.003 compatibility.
     my $self = shift;
 
@@ -382,24 +385,24 @@ sub declare_sub {
     if (ref($first) eq 'HASH') {
 	# Using named arguments.
 	! @_ && (($ptr = $first->{ptr}) || ($name = $first->{name}))
-	    or croak 'Usage: $lib->declare_sub({ "name" => $func_name [, "return" => $ret_type] [, "args" => \@arg_types] [, "decl" => $decl] })';
-	$convention = $first->{decl} || default_convention();
-	$ret_type = $first->{"return"} || 'i';
+	    or croak 'Usage: $lib->DeclareSub({ "name" => $func_name [, "return" => $ret_type] [, "args" => \@arg_types] [, "decl" => $decl] })';
+	$convention = $first->{decl} || $DefConv;
+	$ret_type = $first->{'return'} || 'i';
 	@arg_type = ($first->{args} ? @{$first->{args}} : ());
-	$libref = $first->{libref};
+	$libref = $first->{'libref'};
     } else {
 	# Using positional arguments.
 	($is_method ? $name : $ptr) = $first
-	    or croak 'Usage: $lib->declare_sub( $func_name [, $return_type [, \@arg_types]] )';
-	$convention = default_convention();
+	    or croak 'Usage: $lib->DeclareSub( $func_name [, $return_type [, \@arg_types]] )';
+	$convention = $DefConv;
 	$ret_type = shift || 'i';
 	@arg_type = @_;
     }
     unless ($ptr) {
-	$libref ||= $self->libref()
+	$libref ||= $self->LibRef()
 	    if $is_method;
 	$libref
-	    or croak 'ExtUtils::DynaLib::declare_sub: non-method form requires a "ptr" or "libref"';
+	    or croak 'ExtUtils::DynaLib::DeclareSub: non-method form requires a "ptr" or "libref"';
 	$ptr = DynaLoader::dl_find_symbol($libref, $name)
 	    or croak "Can't find symbol \"$name\": ", DynaLoader::dl_error();
     }
@@ -432,7 +435,7 @@ package ExtUtils::DynaLib::Callback;
 use strict;
 use Carp;
 use vars qw($config $empty);
-use subs qw(new ptr DESTROY);
+use subs qw(new Ptr DESTROY);
 
 $empty = "";
 
@@ -464,7 +467,7 @@ sub new {
     return bless $self, $class;
 }
 
-sub ptr {
+sub Ptr {
     $_[0]->[3];
 }
 
@@ -476,7 +479,4 @@ sub DESTROY {
     $config->[$index] = pack("IppI", $codeptr, $empty, $empty, $func);
 }
 
-# Autoload methods go after =cut, and are processed by the autosplit program.
-
 1;
-__END__

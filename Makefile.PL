@@ -1,13 +1,13 @@
 use ExtUtils::MakeMaker;
 
 use strict;
-require 5.003;  # maybe it'll work with 5.002, haven't tried.
+require 5.002;
 use Config;
 
 use vars qw($archname @convention $convention
-	    $num_callbacks $cflags
-	    $DynaLib_xs);
-use subs qw(write_xs);
+	    $num_callbacks %cflags
+	    $conv_xs $cbfunc_c);
+use subs qw(write_conv write_cbfunc);
 
 $Config{usedl} eq 'define'
     or die <<TOOBAD;
@@ -22,25 +22,31 @@ TOOBAD
 
 
 @convention = ();
-$cflags = "";
+%cflags = ();
 map {
     /^DECL=(.*)$/ and push @convention, split(",", $1);
     /^CALLBACKS=(\d+)$/ and $num_callbacks = $1;
-    /^HAVE_(.+)$/ and $cflags .= " -DHAVE_$1";
+    /^-D./ and $cflags{$_} = 1;
+    /^(-D.*)=0$/ and $cflags{$1} = 0;
 } @ARGV;
 
 # Appease MakeMaker:
-@ARGV = grep { !/^(DECL|CALLBACKS)=/ && !/^HAVE_/ } @ARGV;
+@ARGV = grep { !/^(DECL=|CALLBACKS=(\d+)$|-D.)/ } @ARGV;
 
 $archname = $Config{archname};
 unless (@convention) {
     for (
-	 [ '^i[3-9]86.*linux$', ['cdecl'] ],
-	 [ '^i[3-9]86.*bsd$', ['cdecl'] ],
-	 [ '^sun4-', ['sparc'] ],
-	 [ '', [] ],
+	 [ '^i[3-9]86.*linux$', sub {'cdecl'} ],
+	 [ '^i[3-9]86.*bsd$', sub {'cdecl'} ],
+	 [ '^sun4-', sub {'sparc'} ],
+	 [ '^cygwin32', sub {
+			$num_callbacks = 0 unless defined ($num_callbacks);
+			$^O =~ /95/ ? 'cdecl' : ()
+		    } ],
+	 [ 'MSWin32', sub {'cdecl'} ],
+	 [ '', sub { () } ],
 	 ) {
-	@convention = @{$_->[1]}, last if $archname =~ /$_->[0]/;
+	@convention = &{$_->[1]}, last if $archname =~ /$_->[0]/;
     }
 }
 
@@ -72,148 +78,78 @@ make it work, please let me (jtobey\@user1.channel1.com) know.
 SORRY
 
 
-if (! $Config{gccversion} && $cflags !~ /-DHAVE_ALLOCA_H\b/) {
-    # gcc can survive without alloca.h; not all cc's can.
-    $cflags .= " -DHAVE_ALLOCA_H";
-}
+# Decide whether we need various things defined.
+# This should really be determined by compiling and running a test file.
+
+$cflags{-DHAVE_ALLOCA_H} = 1
+    if $Config{cc} =~ /\bcc/ && ! exists($cflags{-DHAVE_ALLOCA_H});
+$cflags{-DCDECL_ONE_BY_ONE} = 1
+    if $Config{gccversion} && ! exists($cflags{-DCDECL_ONE_BY_ONE});
+$cflags{-DCDECL_SUBTRACT_CURRENT} = 1
+    if $Config{archname} =~ /win32/i
+	&& ! exists($cflags{-DCDECL_SUBTRACT_CURRENT});
 
 print "Using calling convention(s): @convention\n";
+map { $cflags{"-DDYNALIB_USE_$_"} = 1 } @convention;
 print "Default calling convention: $convention[0]\n";
+$cflags{"-DDYNALIB_DEFAULT_CONV=\\\"$convention[0]\\\""} = 1;
 $num_callbacks = 4 unless defined($num_callbacks);
 print "Maximum number of callbacks: $num_callbacks\n";
+$cflags{"-DDYNALIB_NUM_CALLBACKS=$num_callbacks"} = 1;
 
-$DynaLib_xs = "DynaLib.xs";
-write_xs();
+$conv_xs = "conv.xsi";
+write_conv();
+$cbfunc_c = "cbfunc.c";
+write_cbfunc();
 
 WriteMakefile(
     'NAME'	=> 'ExtUtils::DynaLib',
-    'VERSION_FROM' => 'DynaLib.pm', # finds $VERSION
-    'DEFINE'	=> $cflags,     # e.g., '-DHAVE_SOMETHING' 
-    'INC'	=> '-I.',     # e.g., '-I/usr/include/other' 
+    'VERSION_FROM' => 'DynaLib.pm',
+    'DEFINE'	=> join(" ", grep { $cflags{$_} } sort keys %cflags),
+    'INC'	=> '-I.',
 );
 
 
 sub MY::postamble {
     my $self = shift;
-    return "
+    my $postamble = "
 clean::
-	$self->{RM_F} $DynaLib_xs
+	\$(RM_F) $conv_xs $cbfunc_c
 
-$DynaLib_xs: Makefile.PL
+$conv_xs: $0 \$(CONFIGDEP)
 
-DynaLib.o: callback.c callback.h @{[ map { \"$_.c\" } @convention ]}
-"
+$cbfunc_c: $0 \$(CONFIGDEP)
+
+DynaLib.c: $conv_xs
+
+DynaLib\$(OBJ_EXT): DynaLib.c $cbfunc_c @{[ map { \"$_.c\" } @convention ]}
+";
+#    "@convention" =~ /\bcdecl\b/ and $postamble .= "
+#clean::
+#	\$(RM_F) testcall\$(EXE_EXT) testcall\$(OBJ_EXT) config.h
+#
+#testcall\$(EXE_EXT): testcall\$(OBJ_EXT)
+#
+#config.h: testcall\$(EXE_EXT)
+#	./testcall\$(EXE_EXT) > \$\@
+#
+#DynaLib\$(OBJ_EXT): config.h
+#";
+    return $postamble;
 }
 
-sub write_xs {
+sub write_conv {
   my ($i);
 
-# Write DynaLib.xs
+# Write conv.xsi, to be included in DynaLib.xs
 
-open XS, ">$DynaLib_xs"
-    or die "Can't write file \"$DynaLib_xs\": $!\n";
-print "Writing $DynaLib_xs\n";
-
-#
-# Top section is typical h2xs default stuff.
-#
-print XS <<XS;
-#line ${\ (__LINE__ + 2)} "$0"
-#ifdef __cplusplus
-extern "C" {
-#endif
-#include "EXTERN.h"
-#include "perl.h"
-#include "XSUB.h"
-#ifdef __cplusplus
-}
-#endif
-
-#define NUM_CALLBACKS $num_callbacks
-#include "callback.h"
-XS
-
-#
-# Each calling convention adds its own chunk of code.
-# The file ${convention}.c must define a macro
-# ${convention}_CALL(func, type) for calling the function pointed to by func
-# returning type type.
-# The arguments to this function will be found on the perl stack.
-# Each arg will be packed as the appropriate type.
-#
-for $convention (@convention) {
-    print XS "#include \"${convention}.c\"\n";
-}
-
-#
-# The callback functions.
-#
-for $i (0 .. $num_callbacks - 1) {
-    print XS <<XS;
-
-#line ${\ (__LINE__ + 3)} "$0"
-static int
-#ifdef I_STDARG
-_cb_func$i(int first, ...)
-#else
-_cb_func$i(int first, va_alist)
-va_dcl
-#endif
-{
-  va_list ap;
-  int result;
-
-#ifdef I_STDARG
-  va_start(ap,first);
-#else
-  va_start(ap);
-#endif
-  result = cb_call_sub($i, first, ap);
-  va_end(ap);
-  return result;
-}
-XS
-}
-
-#
-# Array of pointers to callback entry points.
-#
-print XS "\nstatic const cb_callback cb_arr[NUM_CALLBACKS] = {\n";
-for $i (0 .. $num_callbacks - 1) {
-    print XS "\t_cb_func$i,\n";
-}
-print XS <<XS;
-};
-
-#include "callback.c"
-XS
-
-#
-# Switch from C to XS mode.
-#
-print XS <<XS;
-
-
-MODULE = ExtUtils::DynaLib  PACKAGE = ExtUtils::DynaLib
-
-void
-poke(dest, data)
-	void *	dest
-	SV *	data
-	CODE:
-	{
-	  STRLEN len;
-	  char *source;
-	  if (SvPOK(data)) {
-	    source = SvPV(data, len);
-	    Copy(source, dest, len, char);
-	  }
-	}
-XS
+open XS, ">$conv_xs"
+    or die "Can't write file \"$conv_xs\": $!\n";
+print "Writing $conv_xs\n";
 
 #
 # XS definitions for the "glue" functions that call C via the macro
-# described above.  We write one function per return type per
+# described above.  We write one XSUB per return type per
 # calling convention.
 #
 for $convention (@convention) {
@@ -269,30 +205,53 @@ ${convention}_ptr_call_packed(symref, ...)
 	OUTPUT: RETVAL
 XS
 }
-
-#
-# Provide a default calling convention.  It is the first one in @convention.
-#
-print XS <<XS;
-
-char *
-default_convention()
-	CODE:
-	RETVAL = "$convention[0]";
-	OUTPUT:
-	RETVAL
-XS
-
-print XS <<XS;
-
-BOOT:
-#line ${\ (__LINE__ + 4)} "$0"
-	/* Setup the callback config array. */
-#if PATCHLEVEL >= 4
-	sv_setsv(SvRV(ST(2)), newRV_noinc((SV*) cb_init(ST(2))));
-#else
-	sv_setsv(SvRV(ST(2)), newRV((SV*) cb_init(ST(2))));
-#endif
-XS
 close XS;
+}
+
+sub write_cbfunc {
+  my ($i);
+
+# Write cbfunc.c, to be included in DynaLib.xs
+
+open FUNCS, ">$cbfunc_c"
+    or die "Can't write file \"$cbfunc_c\": $!\n";
+print "Writing $cbfunc_c\n";
+#
+# The callback functions.
+#
+for $i (0 .. $num_callbacks - 1) {
+    print FUNCS <<FUNCS;
+
+static int
+#ifdef I_STDARG
+_cb_func$i(int first, ...)
+#else
+_cb_func$i(first, va_alist)
+int first;
+va_dcl
+#endif
+{
+  va_list ap;
+  int result;
+
+#ifdef I_STDARG
+  va_start(ap,first);
+#else
+  va_start(ap);
+#endif
+  result = cb_call_sub($i, first, ap);
+  va_end(ap);
+  return result;
+}
+FUNCS
+}
+
+#
+# Array of pointers to callback entry points.
+#
+print FUNCS "\nstatic const cb_callback cb_arr[DYNALIB_NUM_CALLBACKS] = {\n";
+for $i (0 .. $num_callbacks - 1) {
+    print FUNCS "\t_cb_func$i,\n";
+}
+print FUNCS "};\n";
 }

@@ -33,3 +33,9 @@ Made compatible with perl 5.003.
 	die works with callbacks (except in certain complex cases).
 Added a few bits & pieces.
 Sun's cc is now supported (thanks to lvirden@cas.org).
+
+0.22  
+	Renamed methods to avoid possible future keyword conflict:
+declare_sub became DeclareSub, poke became Poke, etc.  Added
+ExtUtils::DynaLib::Struct package.  Got it to work on Windows 95 with
+Borland C++ (but probably not repeatably ;-) )

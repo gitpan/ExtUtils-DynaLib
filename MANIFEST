@@ -1,11 +1,14 @@
 Changes
 DynaLib.pm
+DynaLib.xs
 MANIFEST
 Makefile.PL
 README
-callback.c
-callback.h
+README.win32
 cdecl.c
 hack30.c
 sparc.c
 test.pl
+DynaLib/Makefile.PL
+DynaLib/Struct.pm
+DynaLib/test.pl

@@ -19,7 +19,8 @@ eval {
     # ...and it was very good at it...
     # the moral being that segmentation faults should be expected
     # when using this code.
-    $SIG{SEGV} = sub { die "Illegal memory operation" };
+    use Carp;
+    $SIG{SEGV} = sub { confess "Illegal memory operation" };
 };
 
 $num = 2;
@@ -35,31 +36,43 @@ sub assert {
     ++ $num;
 }
 
-$libm_arg = DynaLoader::dl_findfile("-lm");
-if (! $libm_arg || $libm_arg =~ /libm\.a$/) {
-    warn "$0: Can't find dynamic -lm!  Skipping the math lib tests.\n";
-    assert(1);
-} else {
-    $libm = new ExtUtils::DynaLib("-lm");
-    $pow = $libm->declare_sub ({ "name" => "pow",
-				 "return" => "double",
-				 "args" => ["d", "d"],
-			     });
-    $sqrt2 = &{$pow}(2, 0.5);
-    assert(1, $sqrt2, 2**0.5);
-}
-
 use Config;
 $libc_arg = $Config{libc} || "-lc";
 eval { $libc = new ExtUtils::DynaLib($libc_arg); };
 
+if ($@ && ($^O eq "cygwin3295" || $^O eq "MSWin32")) {
+    $libc_arg = "\\WINDOWS\\SYSTEM\\MSVCRT40.DLL";
+    eval { $libc = new ExtUtils::DynaLib($libc_arg); };
+    $@ && eval { $libc = new ExtUtils::DynaLib("MSVCRT40.DLL"); };
+}
 if ($@) {
     assert(0);
-    die "Can't load -lc!  Giving up.\n";
+    die "Can't load -lc: $@", "Giving up.\n";
     exit;
 }
 
-$strlen = $libc->declare_sub ({ "name" => "strlen",
+$libm_arg = DynaLoader::dl_findfile("-lm");
+$@ = "";
+if (! $libm_arg || $libm_arg =~ /libm\.a$/) {
+    $libm = $libc;
+} else {
+    eval { $libm = new ExtUtils::DynaLib("-lm"); };
+}
+$@ || eval {
+    $pow = $libm->DeclareSub ({ "name" => "pow",
+				 "return" => "double",
+				 "args" => ["d", "d"],
+			     });
+};
+if ($@ || ! $pow) {
+    warn "$0: Can't find dynamic -lm!  Skipping the math lib tests.\n";
+    assert(1);
+} else {
+    $sqrt2 = &{$pow}(2, 0.5);
+    assert(1, $sqrt2, 2**0.5);
+}
+
+$strlen = $libc->DeclareSub ({ "name" => "strlen",
 				"return" => "int",
 				"args" => ["p"],
 			    });
@@ -137,7 +150,7 @@ sub my_sprintf {
 			  }
 	       }
 		      my $buffer = "\0" x $width;
-		      &{$libc->declare_sub("sprintf", "void", @arg_types)}
+		      &{$libc->DeclareSub("sprintf", "void", @arg_types)}
 			($buffer, $fmt, @args);
 		      $buffer =~ s/\0.*//;
 		      return $buffer;
@@ -153,10 +166,10 @@ $got = my_sprintf($fmt, @args);
 
 assert(1, $got, $expected);
 
-# Try passing a pointer to declare_sub.
-$fopen_ptr = DynaLoader::dl_find_symbol($libc->libref(), "fopen")
+# Try passing a pointer to DeclareSub.
+$fopen_ptr = DynaLoader::dl_find_symbol($libc->LibRef(), "fopen")
     or die DynaLoader::dl_error();
-$fopen = ExtUtils::DynaLib::declare_sub ({ "ptr" => $fopen_ptr,
+$fopen = ExtUtils::DynaLib::DeclareSub ({ "ptr" => $fopen_ptr,
 			"return" => "ptr",
 			"args" => ["p", "p"] });
 
@@ -171,13 +184,15 @@ if (! $fp) {
     assert(0);
 } else {
     # Hope "I" will work for types size_t and (FILE *)!
-    $fread = $libc->declare_sub("fread", "int",
+    $fread = $libc->DeclareSub("fread", "int",
 				"P", "I", "I", "I");
     $buffer = "\0" x 4;
     $result = &{$fread}($buffer, 1, length($buffer), $fp);
     assert($result == 4, $buffer, "a st");
     unlink "tmp.tmp";
 }
+
+if (@$ExtUtils::DynaLib::Callback::config) {
 $ptr_len = length(pack("p", $tmp = "foo"));
 sub compare_lengths {
     # Not a model of efficiency, only functionality!!
@@ -197,8 +212,8 @@ $array = pack("p*", @list);
 #
 $callback = new ExtUtils::DynaLib::Callback(\&compare_lengths, "i", "i", "i");
 
-$qsort = $libc->declare_sub("qsort", "void", "P", "I", "I", "I");
-&{$qsort}($array, scalar(@list), length($array) / @list, $callback->ptr());
+$qsort = $libc->DeclareSub("qsort", "void", "P", "I", "I", "I");
+&{$qsort}($array, scalar(@list), length($array) / @list, $callback->Ptr());
 
 @expected = sort { length($a) <=> length($b) } @list;
 @got = unpack("p*", $array);
@@ -207,16 +222,21 @@ assert(1, "[@got]", "[@expected]");
 # Hey!  We've got callbacks.  We've got a way to call them.
 # Who needs libraries?
 $callback = new ExtUtils::DynaLib::Callback(sub {
-    "foo" . ($_[0] + 10*$_[1] + 100*$_[2]);
-}, "p", "i", "i", "i");
-$foo = ExtUtils::DynaLib::declare_sub($callback->ptr(), "p", "i", "i", "i");
+    $_[0] + 10*$_[1] + 100*$_[2];
+}, "i", "i", "p", "i");
+$foo = ExtUtils::DynaLib::DeclareSub($callback->Ptr(), "i", "i", "p", "i");
 
-$got = &{$foo}(1, 7, 3.14);
-$expected = "foo371";
+$got = &{$foo}(1, $tmp = 7, 3.14);
+$expected = 371;
 assert(1, $got, $expected);
+} else {
+    warn("Skipping callback tests on this platform\n");
+    assert(1);
+    assert(1);
+}
 
 $buf = "willo";
-ExtUtils::DynaLib::poke(unpack("i", pack("p", $buf)), "he");
+ExtUtils::DynaLib::Poke(unpack("i", pack("p", $buf)), "he");
 assert(1, $buf, "hello");
 
 # Can't unload libraries (portably, yet) because DynaLoader does not

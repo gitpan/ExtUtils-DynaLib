@@ -3,13 +3,17 @@ dynamic libraries.  Example:
 
   use ExtUtils::DynaLib;
   $libm = new ExtUtils::DynaLib("-lm");
-  $sinh = $libm->declare_sub("sinh", "d", "d");
-  print "The hyperbolic sine of 3 is ", $sinh->(3), "\n";
+  $sinh = $libm->DeclareSub("sinh", "d", "d");
+  print "The hyperbolic sine of 3 is ", &$sinh(3), "\n";
 
 	************************************************************
 	************************************************************
+	************************************************************
+	*****                                                  *****
 	*****   THIS IS ALPHA CODE!!  USE AT YOUR OWN RISK!!   *****
 	***** WHAT WORKS ON ONE MACHINE WON'T WORK ON ANOTHER! *****
+	*****                                                  *****
+	************************************************************
 	************************************************************
 	************************************************************
 
@@ -27,15 +31,15 @@ a message suggesting that you try this:
 
   perl Makefile.PL DECL=cdecl
 
-(On a Sparc, use DECL=sparc instead.)  This time the module should
-compile okay, but you MUST run
+(On a Sparc, use DECL=sparc instead.)  If it compiles okay, you MUST
+run
 
   make test
 
 to see if your system's calling convention really is "cdecl".
 
 If `make test' prints "not ok" even once (other than for failure to
-load a dynamic C library), we should probably write a new calling
+load a dynamic library), we should probably write a new calling
 convention to accommodate your system.
 
 Alternatively, if you are in a rush and just want to see it work, you
@@ -43,5 +47,18 @@ may try `perl Makefile.PL DECL=hack30' followed by `make test'.  But
 PLEASE read the discussion of hack30 in DynaLib.pm or the
 ExtUtils::DynaLib manpage.
 
+The callback feature has sometimes caused grief in building the
+module.  If you still can't get it built and loaded, try appending
+`CALLBACKS=0' to the `perl Makefile.PL' line.  And tell me of your
+success or failure.
+
+COPYRIGHT
+
+This file and its accompanying materials are Copyright 1997 by John
+Tobey.  They may be modified and distributed and used under the same
+conditions as Perl itself.  Of course, there is no expressed or
+implied warranty.  See the file README in the top-level Perl source
+directory for more information.
+
 Enjoy!
--jtobey@user1.channel1.com
+jtobey@user1.channel1.com

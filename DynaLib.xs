@@ -1,26 +1,62 @@
+#ifdef __cplusplus
+extern "C" {
+#endif
+#include "EXTERN.h"
+#include "perl.h"
+#include "XSUB.h"
+#ifdef __cplusplus
+}
+#endif
+
+#ifdef DYNALIB_USE_cdecl
+#include "cdecl.c"
+#endif
+#ifdef DYNALIB_USE_sparc
+#include "sparc.c"
+#endif
+#ifdef DYNALIB_USE_hack30
+#include "hack30.c"
+#endif
+
+#ifndef DYNALIB_NUM_CALLBACKS
+#define DYNALIB_NUM_CALLBACKS 0
+#endif
+
+typedef int (*cb_callback) _((int a, ...));
+typedef struct {
+  SV *coderef;
+  char *ret_type;
+  char *arg_type;
+  cb_callback func;
+} cb_entry;
+
+static int cb_call_sub _((int index, int first, va_list ap));
+
+#include "cbfunc.c"
+
 static AV *cb_av_config;
-static const cb_callback cb_arr[NUM_CALLBACKS];
+static const cb_callback cb_arr[DYNALIB_NUM_CALLBACKS];
 
 static AV *
 cb_init(arr_ref)
 SV *arr_ref;
 {
-  SV *elts[NUM_CALLBACKS];
+  SV *elts[DYNALIB_NUM_CALLBACKS];
   int i;
   cb_entry entry;
 
   entry.coderef = NULL;
   entry.arg_type = "";
   entry.ret_type = "";
-  for (i = 0; i < NUM_CALLBACKS; i++) {
+  for (i = 0; i < DYNALIB_NUM_CALLBACKS; i++) {
     entry.func = cb_arr[i];
     elts[i] = newSVpv((char *) &entry, sizeof entry);
   }
-  cb_av_config = av_make(NUM_CALLBACKS, elts);
+  cb_av_config = av_make(DYNALIB_NUM_CALLBACKS, elts);
   return cb_av_config;
 }
 
-#if NUM_CALLBACKS
+#if DYNALIB_NUM_CALLBACKS
 static int
 cb_call_sub(index, first, ap)
 int index;
@@ -113,17 +149,54 @@ va_list ap;
   case 'i' :
     result = POPi;
     break;
+  /*
+   * Returning a pointer is impossible to do safely, it seems.
   case 'p' :
     if (sizeof (char *) == sizeof (int)) {
       result = (int) POPp;
       break;
     }
+   */
   default :
-    croak("Can't use '%c' as return type in callback", *(config->ret_type));
+    croak("Can't use '%s' as return type in callback", config->ret_type);
   }
   PUTBACK;
   FREETMPS;
   LEAVE;
   return result;
 }
-#endif  /* NUM_CALLBACKS */
+#endif  /* DYNALIB_NUM_CALLBACKS != 0 */
+
+
+MODULE = ExtUtils::DynaLib  PACKAGE = ExtUtils::DynaLib
+
+void
+Poke(dest, data)
+	void *	dest
+	SV *	data
+	CODE:
+	{
+	  STRLEN len;
+	  char *source;
+	  if (SvPOK(data)) {
+	    source = SvPV(data, len);
+	    Copy(source, dest, len, char);
+	  }
+	}
+
+INCLUDE: conv.xsi
+
+char *
+default_convention()
+	CODE:
+	RETVAL = DYNALIB_DEFAULT_CONV;
+	OUTPUT:
+	RETVAL
+
+BOOT:
+	/* Setup the callback config array. */
+#if PATCHLEVEL >= 4
+	sv_setsv(SvRV(ST(2)), newRV_noinc((SV*) cb_init(ST(2))));
+#else
+	sv_setsv(SvRV(ST(2)), newRV((SV*) cb_init(ST(2))));
+#endif

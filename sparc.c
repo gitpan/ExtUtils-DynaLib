@@ -2,9 +2,13 @@
 #include <alloca.h>
 #endif
 
-static int sparc_pray(void *func) {
-  dXSARGS;
-  STRLEN arg_len;
+static int
+sparc_pray(ax, items, func)
+I32 ax;
+I32 items;
+void *func;
+{
+  STRLEN arg_len, chunk_len;
   char *arg_scalar, *arg_on_stack;
   int nbytes = 0;
   int pseu[6];  /* Array of first six "pseudo-arguments" */
@@ -28,12 +32,15 @@ static int sparc_pray(void *func) {
 	stack_needed += arg_len;
       }
       if (stack_needed > 0) {
+	arg_on_stack = alloca(stack_needed);
 	/* Wish I knew why we have to subtract off 4. */
-	arg_on_stack = alloca(stack_needed) - sizeof (int);
+	arg_on_stack -= sizeof (int);
 	if (check_len > sizeof pseu) {
-	  arg_len = check_len - sizeof pseu;
-	  Copy(&arg_scalar[arg_len], arg_on_stack, arg_len, char);
-	  arg_on_stack += arg_len;
+	  /* An argument straddles the 24-byte line; part goes on stack. */
+	  SvPV(ST(i), arg_len);
+	  chunk_len = check_len - sizeof pseu;
+	  Copy(&arg_scalar[arg_len - chunk_len], arg_on_stack, chunk_len, char);
+	  arg_on_stack += chunk_len;
 	}
 	while (i < items) {
 	  arg_scalar = SvPV(ST(i), arg_len);
@@ -49,4 +56,5 @@ static int sparc_pray(void *func) {
 			       pseu[3], pseu[4], pseu[5]);
 }
 
-#define sparc_CALL(func, type) ((*((type (*)(void *)) sparc_pray))(func))
+#define sparc_CALL(func, type)						\
+    ((*((type (*)(I32, I32, void *)) sparc_pray))(ax,items,func))

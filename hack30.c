@@ -1,21 +1,27 @@
 /* horrible hacks here. */
 
-#define hack30_MAXPSEU 30
+#ifndef MAXPSEU
+#define MAXPSEU 30
+#endif
 
-static int hack30_pray(void *func) {
-  dXSARGS;
+static int
+hack30_pray(ax, items, func)
+I32 ax;
+I32 items;
+void *func;
+{
   STRLEN arg_len;
   void *arg_scalar;
   int i = 1;
   int nbytes = 0;
-  int pseu[hack30_MAXPSEU];
+  int pseu[MAXPSEU];
   int check_len;
 
   for (i = 1; i < items; i++) {
     arg_scalar = SvPV(ST(i), arg_len);
     check_len = nbytes + arg_len;
     if (check_len > sizeof pseu) {
-      croak("Too many arguments.  The hack30 calling convention accepts up to 30 int-size arguments.");
+      croak("Too many arguments.  The hack30 calling convention accepts up to %d int-size arguments.", MAXPSEU);
     }
     Copy(arg_scalar, &((char *) (&pseu[0]))[nbytes],
 	 arg_len, char);
@@ -35,4 +41,5 @@ static int hack30_pray(void *func) {
   }
 }
 
-#define hack30_CALL(func, type) ((*((type (*)(void *)) hack30_pray))(func))
+#define hack30_CALL(func, type)						\
+    ((*((type (*)(I32, I32, void *)) hack30_pray))(ax,items,func))

@@ -23,3 +23,6 @@ Made compatible with perl 5.003.
 
 0.12  Sun Jun 22 10:34:21  1997
 	Minor stuff.  Renamed to ExtUtils::DynaLib.
+
+0.20  Mon Jul  7 23:42:00  1997
+	Support for callbacks.  Major and minor bugfixes.

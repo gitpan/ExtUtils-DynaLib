@@ -2,8 +2,12 @@
 #include <alloca.h>
 #endif
 
-static int cdecl_pray(void *func) {
-  dXSARGS;
+static int
+cdecl_pray(ax, items, func)
+I32 ax;
+I32 items;
+void *func;
+{
   STRLEN arg_len;
   void *arg_scalar, *arg_on_stack;
   register int i;
@@ -18,4 +22,5 @@ static int cdecl_pray(void *func) {
   return (*((int (*)()) func))();
 }
 
-#define cdecl_CALL(func, type) ((*((type (*)(void *)) cdecl_pray))(func))
+#define cdecl_CALL(func, type)						\
+    ((*((type (*)(I32, I32, void *)) cdecl_pray))(ax,items,func))

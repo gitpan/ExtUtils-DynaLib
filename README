@@ -17,14 +17,17 @@ That said, once you have unpacked the files, run the usual
 
   perl Makefile.PL
 
-and see if it complains.  At this point, at least two things can go
-wrong.  First, your perl must be of the dynamic variety.  Be sure you
-answered "y" when Configure asked, "Do you wish to use dynamic
-loading?".
+and see if it complains.  At this point, various things can go wrong.
+First, your perl must be of the dynamic variety.  Be sure you answered
+"y" when Configure asked, "Do you wish to use dynamic loading?".
 
-The other thing Makefile.PL checks is whether the module has been
-tested on a machine matching your system architecture.  If not, you
-will see a message suggesting that you try this:
+Makefile.PL will exit with a message if your perl was built with a
+compiler other than gcc.  This is because the module has not been
+reported to work with other compilers yet.  (It uses alloca().)
+
+Another thing Makefile.PL checks is whether the module has been tested
+on a machine matching your system architecture.  If not, you will see
+a message suggesting that you try this:
 
   perl Makefile.PL DECL=cdecl
 
@@ -35,11 +38,14 @@ compile okay, but you MUST run
 
 to see if your system's calling convention really is "cdecl".
 
-If `make test' prints "not ok" even once, we should probably hack
-together a new calling convention to accommodate your system.
+If `make test' prints "not ok" even once (other than for failure to
+load a dynamic C library), we should probably write a new calling
+convention to accommodate your system.
+
 Alternatively, if you are in a rush and just want to see it work, you
 may try `perl Makefile.PL DECL=hack30' followed by `make test'.  But
-PLEASE read the discussion of hack30 in DynaLib.pm.
+PLEASE read the discussion of hack30 in DynaLib.pm or the
+ExtUtils::DynaLib manpage.
 
 Enjoy!
 -jtobey@user1.channel1.com

@@ -3,7 +3,8 @@ DynaLib.pm
 MANIFEST
 Makefile.PL
 README
-README.cygwin32
+callback.c
+callback.h
 cdecl.c
 hack30.c
 sparc.c

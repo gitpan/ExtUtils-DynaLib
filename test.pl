@@ -33,7 +33,11 @@ if (! $libm_arg || $libm_arg =~ /libm\.a$/) {
 				 "args" => ["d", "d"],
 			     });
     $sqrt2 = &{$pow}(2, 0.5);
-    print (abs($sqrt2 - 1.414) < 0.001 ? "ok 2\n" : "not ok 2\n");
+    if (abs($sqrt2 - 2**0.5) < 1e-10) {
+	print "ok 2\n";
+    } else {
+	print "not ok 2; expected ", 2**0.5, ", got $sqrt2\n";
+    }
 }
 
 use Config;
@@ -63,7 +67,7 @@ $strlen = $libc->declare_sub ({ "name" => "strlen",
 #
 <<'PATCH';
 *** pp.c	Thu Jun 12 21:11:14 1997
---- pp.c	Sat Jun 28 15:18:39 1997
+--- pp.c	Sun Jul  6 17:34:30 1997
 ***************
 *** 3834,3840 ****
   	case 'p':
@@ -73,19 +77,21 @@ $strlen = $libc->declare_sub ({ "name" => "strlen",
   		sv_catpvn(cat, (char*)&aptr, sizeof(char*));
   	    }
   	    break;
---- 3834,3849 ----
+--- 3834,3851 ----
   	case 'p':
   	    while (len-- > 0) {
   		fromstr = NEXTFROM;
 ! 		if (fromstr == &sv_undef)
 ! 		    aptr = NULL;
 ! 		else {
-! 		    if (SvTEMP(fromstr) || SvPADTMP(fromstr))
+! 		    if (dowarn && (SvTEMP(fromstr) || SvPADTMP(fromstr)))
+! 		        warn("Attempt to pack pointer to temporary storage");
+! 		    if (SvPADTMP(fromstr))
 ! 			fromstr = sv_mortalcopy(fromstr);
 ! 		    if (SvPOK(fromstr) || SvNIOK(fromstr))
-! 			aptr = SvPV(fromstr,na);
+! 		        aptr = SvPV(fromstr,na);
 ! 		    else
-! 			aptr = SvPV_force(fromstr, na);
+! 		        aptr = SvPV_force(fromstr, na);
 ! 		}
   		sv_catpvn(cat, (char*)&aptr, sizeof(char*));
   	    }
@@ -130,13 +136,17 @@ sub my_sprintf {
 
 {};  # poor old Emacs :(
 
-$fmt = "%x %10sfoo %d %10.7g %f %d %d %d\n";
+$fmt = "%x %10sfoo %d %10.7g %f %d %d %d";
 @args = (253, "bar", -789, 2.32578, 3.14, 5, 6, 7);
 
 $expected = sprintf($fmt, @args);
 $got = my_sprintf($fmt, @args);
 
-print ($got eq $expected ? "ok 4\n" : "not ok 4\n");
+if ($got eq $expected) {
+    print "ok 4\n";
+} else {
+    print "not ok 4; expected \"$expected\", got \"$got\"\n";
+}
 
 # Try passing a pointer to declare_sub.
 # Note: the libref method is "undocumented"
@@ -144,8 +154,8 @@ print ($got eq $expected ? "ok 4\n" : "not ok 4\n");
 $fopen_ptr = DynaLoader::dl_find_symbol($libc->libref(), "fopen")
     or die DynaLoader::dl_error();
 $fopen = ExtUtils::DynaLib::declare_sub ({ "ptr" => $fopen_ptr,
-			      "return" => "ptr",
-			      "args" => ["p", "p"] });
+			"return" => "ptr",
+			"args" => ["p", "p"] });
 
 open TEST, ">tmp.tmp"
     or die "Can't write file tmp.tmp: $!\n";
@@ -154,16 +164,45 @@ close TEST;
 
 # Can't do &{$fopen}("tmp.tmp", "r") without the above patch.
 $fp = &{$fopen}($tmp1 = "tmp.tmp", $tmp2 = "r");
-print ($fp ? "ok 5\n" : "not ok 5\n");
+if (! $fp) {
+    print "not ok 5; fopen() returned NULL\n";
+} else {
+    # Hope "I" will work for types size_t and (FILE *)!
+    $fread = $libc->declare_sub("fread", "int",
+				"P", "I", "I", "I");
+    $buffer = "\0" x 4;
+    $result = &{$fread}($buffer, 1, length($buffer), $fp);
+    if ($result == 4 && $buffer eq "a st") {
+	print "ok 5\n";
+    } else {
+	print "not ok 5; expected \"a st\", got \"$buffer\"\n";
+    }
+    unlink "tmp.tmp";
+}
 
-# Hope "I" will work for types size_t and (FILE *)!
-$fread = $libc->declare_sub("fread", "int",
-				  "P", "I", "I", "I");
-$buffer = "\0" x 4;
-$result = &{$fread}($buffer, 1, length($buffer), $fp);
-print ($result == 4 && $buffer eq "a st" ? "ok 6\n" : "not ok 6\n");
+$ptr_len = length(pack("p", $tmp = "foo"));
+sub compare_lengths {
+    my ($ppa, $ppb) = @_;
+    my $pa = unpack("P$ptr_len", pack("i", $ppa));
+    my $pb = unpack("P$ptr_len", pack("i", $ppb));
+    my $A = unpack("p", $pa);
+    my $B = unpack("p", $pb);
+    length($A) <=> length($B);
+}
+@list = qw(A bunch of elements with unique lengths);
+$array = pack("p*", @list);
+$callback = new ExtUtils::DynaLib::Callback(\&compare_lengths, "i", "i", "i");
 
-unlink "tmp.tmp";
+$qsort = $libc->declare_sub("qsort", "void", "P", "I", "I", "I");
+&{$qsort}($array, scalar(@list), length($array) / @list, $callback->ptr());
+@expected = sort { length($a) <=> length($b) } @list;
+@got = unpack("p*", $array);
+
+if ("@got" eq "@expected") {
+    print "ok 6\n";
+} else {
+    print "not ok 6; expected [@expected], got [@got]\n";
+}
 
 # Can't unload libraries (portably, yet) because DynaLoader does not
 # support this.

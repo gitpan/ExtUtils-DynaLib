@@ -3,7 +3,7 @@ dynamic libraries.  Example:
 
   use ExtUtils::DynaLib;
   $libm = new ExtUtils::DynaLib("-lm");
-  $sinh = $libm->declare_sub("sinh", "double", "d");
+  $sinh = $libm->declare_sub("sinh", "d", "d");
   print "The hyperbolic sine of 3 is ", $sinh->(3), "\n";
 
 	************************************************************
@@ -20,10 +20,6 @@ That said, once you have unpacked the files, run the usual
 and see if it complains.  At this point, various things can go wrong.
 First, your perl must be of the dynamic variety.  Be sure you answered
 "y" when Configure asked, "Do you wish to use dynamic loading?".
-
-Makefile.PL will exit with a message if your perl was built with a
-compiler other than gcc.  This is because the module has not been
-reported to work with other compilers yet.  (It uses alloca().)
 
 Another thing Makefile.PL checks is whether the module has been tested
 on a machine matching your system architecture.  If not, you will see

@@ -4,7 +4,9 @@ use strict;
 require 5.003;  # maybe it'll work with 5.002, haven't tried.
 use Config;
 
-use vars qw($archname @convention $convention $num_callbacks $cflags);
+use vars qw($archname @convention $convention
+	    $num_callbacks $cflags
+	    $DynaLib_xs);
 use subs qw(write_xs);
 
 $Config{usedl} eq 'define'
@@ -70,32 +72,17 @@ make it work, please let me (jtobey\@user1.channel1.com) know.
 SORRY
 
 
-$Config{gccversion} || "@convention" eq "hack30"
-	|| $cflags =~ /-DHAVE_ALLOCA_H\b/
-    or die <<NOT_GCC;
-According to Config.pm, your compiler is "$Config{cc}" and there is no
-gcc version number.  By default, this module uses the alloca()
-function, which is a gcc builtin.
-
-If your compiler supports the alloca() function, please accept my
-apologies and type `perl Makefile.PL HAVE_ALLOCA_H' to continue.
-
-If you do not have alloca() and would like to try a hack that avoids
-it (at the expense of some generality and maybe efficiency), you may
-use `perl Makefile.PL DECL=hack30'.  However, I recommend you get gcc
-and build perl with it. ;-)
-
-In any case, be sure to run `make test' before you think about
-installing this module.
-
-NOT_GCC
-
+if (! $Config{gccversion} && $cflags !~ /-DHAVE_ALLOCA_H\b/) {
+    # gcc can survive without alloca.h; not all cc's can.
+    $cflags .= " -DHAVE_ALLOCA_H";
+}
 
 print "Using calling convention(s): @convention\n";
 print "Default calling convention: $convention[0]\n";
 $num_callbacks = 4 unless defined($num_callbacks);
 print "Maximum number of callbacks: $num_callbacks\n";
 
+$DynaLib_xs = "DynaLib.xs";
 write_xs();
 
 WriteMakefile(
@@ -110,9 +97,9 @@ sub MY::postamble {
     my $self = shift;
     return "
 clean::
-	$self->{RM_F} DynaLib.xs
+	$self->{RM_F} $DynaLib_xs
 
-DynaLib.xs: Makefile.PL
+$DynaLib_xs: Makefile.PL
 
 DynaLib.o: callback.c callback.h @{[ map { \"$_.c\" } @convention ]}
 "
@@ -123,9 +110,9 @@ sub write_xs {
 
 # Write DynaLib.xs
 
-open XS, ">DynaLib.xs"
-    or die "Can't write file \"DynaLib.xs\": $!\n";
-print "Writing DynaLib.xs\n";
+open XS, ">$DynaLib_xs"
+    or die "Can't write file \"$DynaLib_xs\": $!\n";
+print "Writing $DynaLib_xs\n";
 
 #
 # Top section is typical h2xs default stuff.
@@ -191,7 +178,7 @@ XS
 #
 # Array of pointers to callback entry points.
 #
-print XS "\nstatic const cb_callback cb_arr[] = {\n";
+print XS "\nstatic const cb_callback cb_arr[NUM_CALLBACKS] = {\n";
 for $i (0 .. $num_callbacks - 1) {
     print XS "\t_cb_func$i,\n";
 }
@@ -204,7 +191,25 @@ XS
 #
 # Switch from C to XS mode.
 #
-print XS "\n\nMODULE = ExtUtils::DynaLib  PACKAGE = ExtUtils::DynaLib\n";
+print XS <<XS;
+
+
+MODULE = ExtUtils::DynaLib  PACKAGE = ExtUtils::DynaLib
+
+void
+poke(dest, data)
+	void *	dest
+	SV *	data
+	CODE:
+	{
+	  STRLEN len;
+	  char *source;
+	  if (SvPOK(data)) {
+	    source = SvPV(data, len);
+	    Copy(source, dest, len, char);
+	  }
+	}
+XS
 
 #
 # XS definitions for the "glue" functions that call C via the macro
@@ -270,13 +275,18 @@ XS
 #
 print XS <<XS;
 
+char *
+default_convention()
+	CODE:
+	RETVAL = "$convention[0]";
+	OUTPUT:
+	RETVAL
+XS
+
+print XS <<XS;
+
 BOOT:
 #line ${\ (__LINE__ + 4)} "$0"
-        newXSproto("ExtUtils::DynaLib::_void_call_packed", XS_ExtUtils__DynaLib_$convention[0]_void_call_packed, file, "\$\@");
-        newXSproto("ExtUtils::DynaLib::_int_call_packed", XS_ExtUtils__DynaLib_$convention[0]_int_call_packed, file, "\$\@");
-        newXSproto("ExtUtils::DynaLib::_double_call_packed", XS_ExtUtils__DynaLib_$convention[0]_double_call_packed, file, "\$\@");
-        newXSproto("ExtUtils::DynaLib::_string_call_packed", XS_ExtUtils__DynaLib_$convention[0]_string_call_packed, file, "\$\@");
-        newXSproto("ExtUtils::DynaLib::_ptr_call_packed", XS_ExtUtils__DynaLib_$convention[0]_ptr_call_packed, file, "\$\@");
 	/* Setup the callback config array. */
 #if PATCHLEVEL >= 4
 	sv_setsv(SvRV(ST(2)), newRV_noinc((SV*) cb_init(ST(2))));

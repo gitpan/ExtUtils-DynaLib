@@ -24,5 +24,12 @@ Made compatible with perl 5.003.
 0.12  Sun Jun 22 10:34:21  1997
 	Minor stuff.  Renamed to ExtUtils::DynaLib.
 
+0.13-0.14  Nicified for CPAN.
+
 0.20  Mon Jul  7 23:42:00  1997
 	Support for callbacks.  Major and minor bugfixes.
+
+0.21  Sat Jul 12 02:01:12  1997
+	die works with callbacks (except in certain complex cases).
+Added a few bits & pieces.
+Sun's cc is now supported (thanks to lvirden@cas.org).

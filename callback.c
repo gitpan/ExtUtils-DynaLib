@@ -1,5 +1,5 @@
 static AV *cb_av_config;
-static const cb_callback cb_arr[];
+static const cb_callback cb_arr[NUM_CALLBACKS];
 
 static AV *
 cb_init(arr_ref)
@@ -20,6 +20,7 @@ SV *arr_ref;
   return cb_av_config;
 }
 
+#if NUM_CALLBACKS
 static int
 cb_call_sub(index, first, ap)
 int index;
@@ -29,6 +30,7 @@ va_list ap;
   dSP;
   I32 nret;
   int i, result;
+  STRLEN old_err_len, new_err_len;
   char *arg_type;
   cb_entry *config;
 
@@ -67,9 +69,43 @@ va_list ap;
     }
   }
   PUTBACK;
-  nret = perl_call_sv(config->coderef, G_SCALAR | G_EVAL | G_KEEPERR);
-  SPAGAIN;
+
+  if (in_eval) {
+    /*
+     * XXX The whole issue of G_KEEPERR and `eval's is very confusing to me.
+     * For example, we should be able to tell whether or not we are in
+     * cleanup code that follows a die.  We can't tell just by looking at $@,
+     * since it may be left over from a previous eval.
+     *
+     * If we're not in cleanup, we should clear $@/errgv before we call the
+     * sub.  The way this code works now, any error string left over from a
+     * completed eval is wrongly included in our croak message.
+     *
+     * It can also produce weirdness when used with Carp::confess.
+     */
+    SvPV(GvSV(errgv), old_err_len);
+    nret = perl_call_sv(config->coderef, G_SCALAR | G_EVAL | G_KEEPERR);
+    SPAGAIN;
+    SvPV(GvSV(errgv), new_err_len);
+    if (new_err_len > old_err_len) {
+      char *msg = SvPV(GvSV(errgv),na);
+      static char prefix[] = "\t(in cleanup) ";  /* from pp_ctl.c */
+
+      if (old_err_len == 0 && strnEQ(msg, prefix, (sizeof prefix) - 1)) {
+	msg += (sizeof prefix) - 1;
+	croak("In callback: %s", msg);
+      }
+      else {
+	croak("%s", msg);
+      }
+    }
+  }
+  else {
+    nret = perl_call_sv(config->coderef, G_SCALAR);
+    SPAGAIN;
+  }
   if (nret != 1) {
+    /* don't know if this can ever happen... */
     croak("Call to callback failed\n");
   }
   switch (*(config->ret_type)) {
@@ -90,3 +126,4 @@ va_list ap;
   LEAVE;
   return result;
 }
+#endif  /* NUM_CALLBACKS */

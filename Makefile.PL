@@ -5,13 +5,30 @@ require 5.002;
 use Config;
 
 use vars qw($archname @convention $convention
-	    $num_callbacks %cflags
-	    $conv_xs $cbfunc_c $cdecl_h);
+	    $num_callbacks %cflags $object
+	    $conv_xs $cbfunc_c $cdecl_h $postamble
+	    $is_gcc);
+
 $conv_xs = "conv.xsi";
 $cbfunc_c = "cbfunc.c";
 $cdecl_h = "cdecl.h";
+$object = '$(BASEEXT)$(OBJ_EXT)';
+
+$is_gcc = $Config{cc} =~ /gcc/i && $Config{gccversion} >= 2;
 
 use subs qw(write_conv write_cbfunc write_cdecl_h);
+
+$postamble = "
+clean::
+	\$(RM_F) $conv_xs $cbfunc_c
+
+$conv_xs: $0 \$(CONFIGDEP)
+
+$cbfunc_c: $0 \$(CONFIGDEP)
+
+DynaLib.c: $conv_xs
+";
+
 
 $Config{usedl} eq 'define'
     or die <<TOOBAD;
@@ -49,18 +66,12 @@ unless (@convention) {
 		    } ],
 	 [ 'MSWin32', sub {'cdecl'} ],
 	 [ 'alpha', sub {
-			unless ($Config{cc} =~ /gcc/) {
-			print "***\n";
-			print "*** WARNING: Passing floating point types\n";
-			print "*** on the Alpha works only with GNU CC.\n";
-			print "*** You might consider building this module\n";
-			print "*** with `make CC=gcc'; otherwise, not all\n";
-			print "*** the tests will pass.\n";
-			print "***\n";
-			print "*** (If you don't plan on calling any\n";
-			print "*** functions that take arguments of type\n";
-			print "*** double or float, you'll be all right.)\n";
-			print "***\n";
+			unless ($is_gcc) {
+			  $postamble .= "\nalpha-cc\$(OBJ_EXT): alpha-cc.s\n"
+			    . "\tcc -c alpha-cc.s -o \$\@\n"
+			    . "\n#alpha-cc.s: alpha-cc.c\n"
+			    . "#\tgcc -O2 -S alpha-cc.c -o \$\@\n";
+			  $object .= " alpha-cc.o";
 			}
 			'alpha'} ],
 	 [ '', sub { () } ],
@@ -72,6 +83,7 @@ WriteMakefile(
     'NAME'	=> 'ExtUtils::DynaLib',
     'VERSION_FROM' => 'DynaLib.pm',
     'DEFINE'	=> '',
+    'OBJECT'	=> $object,
 
     # Don't let MakeMaker set up a dependency loop.
     # cdecl.h depends on testcall.o, not the other way around!
@@ -188,7 +200,7 @@ CONFIG
 	if $archname =~ /win32/i;
     print CONFIG (&$define_if_not("CDECL_ONE_BY_ONE",
 		  (($archname =~ /win32/i && $self->{CC} !~ /\bbcc/i)
-		   || ($Config{gccversion} || 0) >= 2) ? 1 : 0));
+		   || $is_gcc) ? 1 : 0));
     print CONFIG (&$define_if_not("CDECL_ADJUST",
 		  ($self->{CC} =~ /\bbcc/i ? -12 : 0)));
     print CONFIG (&$define_if_not("CDECL_REVERSE", 0));
@@ -198,18 +210,9 @@ CONFIG
 
 sub make_postamble {
     my $self = shift;
-    my $postamble = "
-clean::
-	\$(RM_F) $conv_xs $cbfunc_c
 
-$conv_xs: $0 \$(CONFIGDEP)
-
-$cbfunc_c: $0 \$(CONFIGDEP)
-
-DynaLib.c: $conv_xs
-
-DynaLib\$(OBJ_EXT): DynaLib.c $cbfunc_c @{[ map { \"$_.c\" } @convention ]}
-";
+    $postamble .= "\nDynaLib\$(OBJ_EXT): DynaLib.c $cbfunc_c"
+      . " @{[ map { \"$_.c\" } @convention ]}\n";
 
     ! @convention || grep { $_ eq "cdecl" } @convention
 	or return $postamble;
@@ -278,7 +281,6 @@ sub MY::postamble {
 	$postamble .= " $_";
 	$postamble .= "=$cflags{$_}" if defined $cflags{$_};
     }
-
     write_conv();
     write_cbfunc();
 
@@ -345,70 +347,90 @@ sub write_conv {
 XS
 
 #
-# XS definitions for the "glue" functions that call C via the macro
-# described above.  We write one XSUB per return type per
-# calling convention.
+# XS definition for the "glue" function that calls C.
 #
 for $convention (@convention) {
     print XS <<XS;
 
 void
-${convention}_void_call_packed(symref, ...)
+${convention}_call_packed(symref, ret_type, ...)
 	void *		symref
-	PROTOTYPE: \$\@
-	CODE:
+	char *		ret_type
+	PROTOTYPE: \$\$\@
+	PPCODE:
 	{
-	  (void) ${convention}_CALL(symref, int);
-	}
+	  SV *sv;
+#ifdef HAS_QUAD
+	  Quad_t aquad;
+	  unsigned Quad_t auquad;
+#endif
 
-int
-${convention}_int_call_packed(symref, ...)
-	void *		symref
-	PROTOTYPE: \$\@
-	CODE:
-	{
-	  RETVAL = ${convention}_CALL(symref, int);
-	}
-	OUTPUT: RETVAL
-
-double
-${convention}_double_call_packed(symref, ...)
-	void *		symref
-	PROTOTYPE: \$\@
-	CODE:
-	{
-	  RETVAL = ${convention}_CALL(symref, double);
-	}
-	OUTPUT: RETVAL
-
-char *
-${convention}_string_call_packed(symref, ...)
-	void *		symref
-	PROTOTYPE: \$\@
-	CODE:
-	{
-	  RETVAL = ${convention}_CALL(symref, char *);
-	}
-	OUTPUT: RETVAL
-XS
-
-$has_quad && print XS <<XS;
-
-SV *
-${convention}_quad_call_packed(symref, ...)
-	void *		symref
-	PROTOTYPE: \$\@
-	CODE:
-	{
-	  Quad_t quadval = ${convention}_CALL(symref, Quad_t);
-	  if (sizeof (IV) >= 8) {
-	    RETVAL = newSViv((IV) quadval);
+	  if (*ret_type != '\0') {
+	    sv = sv_newmortal();
 	  }
-	  else {
-	    RETVAL = newSVnv((double) quadval);
+	  switch (*ret_type) {
+	  case '\0' :
+	    (void) ${convention}_CALL(symref, int);
+	    XSRETURN_EMPTY;
+	  case 'i' :
+	    sv_setiv(sv, (IV) ${convention}_CALL(symref, int));
+	    break;
+	  case 'l' :
+	    sv_setiv(sv, (IV) ${convention}_CALL(symref, I32));
+	    break;
+	  case 's' :
+	    sv_setiv(sv, (IV) ${convention}_CALL(symref, I16));
+	    break;
+	  case 'c' :
+	    sv_setiv(sv, (IV) ${convention}_CALL(symref, char));
+	    break;
+	  case 'I' :
+	    sv_setuv(sv, (UV) ${convention}_CALL(symref, unsigned int));
+	    break;
+	  case 'L' :
+	    sv_setuv(sv, (UV) ${convention}_CALL(symref, U32));
+	    break;
+	  case 'S' :
+	    sv_setuv(sv, (UV) ${convention}_CALL(symref, U16));
+	    break;
+	  case 'C' :
+	    sv_setuv(sv, (UV) ${convention}_CALL(symref, unsigned char));
+	    break;
+#ifdef HAS_QUAD
+	  case 'q' :
+	    aquad = ${convention}_CALL(symref, Quad_t);
+	    if (aquad >= IV_MIN && aquad <= IV_MAX)
+	      sv_setiv(sv, (IV)aquad);
+	    else
+	      sv_setnv(sv, (double)aquad);
+	    break;
+	  case 'Q' :
+	    aquad = ${convention}_CALL(symref, unsigned Quad_t);
+	    if (aquad <= UV_MAX)
+	      sv_setuv(sv, (UV)auquad);
+	    else
+	      sv_setnv(sv, (double)auquad);
+	    break;
+#endif
+	  case 'f' :
+	    sv_setnv(sv, (double) ${convention}_CALL(symref, float));
+	    break;
+	  case 'd' :
+	    sv_setnv(sv, ${convention}_CALL(symref, double));
+	    break;
+	  case 'p' :
+	    sv_setpv(sv, ${convention}_CALL(symref, char *));
+	    break;
+	  case 'P' :
+	    sv_setpvn(sv, ${convention}_CALL(symref, char *),
+		      atoi(&ret_type[1]));
+	    break;
+	  default :
+	    croak("unsupported function return type: '%c'", *ret_type);
 	  }
+	  ST(0) = sv;
+	  XSRETURN(1);
 	}
-	OUTPUT: RETVAL
 XS
 }
 close XS;
@@ -434,7 +456,7 @@ FUNCS
     for $i (0 .. $num_callbacks - 1) {
 	print FUNCS <<FUNCS;
 
-static int
+static long
 #ifdef I_STDARG
 _cb_func$i(void * first, ...)
 #else
@@ -444,7 +466,7 @@ va_dcl
 #endif
 {
   va_list ap;
-  int result;
+  long result;
 
 #ifdef I_STDARG
   va_start(ap,first);

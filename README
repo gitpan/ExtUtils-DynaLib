@@ -6,18 +6,17 @@ dynamic libraries.  Example:
   $sinh = $libm->DeclareSub("sinh", "d", "d");
   print "The hyperbolic sine of 3 is ", &$sinh(3), "\n";
 
-	***************************************************************
-	***************************************************************
-	***************************************************************
-	*****                                                     *****
-	*****   THIS ALPHA CODE CONTAINS SYSTEM DEPENDENCIES.     *****
-	*****   IT WILL NOT WORK ON ALL COMPILERS, MACHINES, OR   *****
-	*****   OPERATING SYSTEMS.        USE AT YOUR OWN RISK.   *****
-	*****                                                     *****
-	***************************************************************
-	***************************************************************
-	***************************************************************
 
+	***********************************************************
+	***   THIS CODE CONTAINS SYSTEM DEPENDENCIES.           ***
+	***   IT WILL NOT WORK ON ALL COMPILERS, MACHINES, OR   ***
+	***   OPERATING SYSTEMS.        USE AT YOUR OWN RISK.   ***
+	***********************************************************
+
+
+The module has been tested successfully on iX86, Sparc, and Alpha
+machines.  However, there are probably compilers for these chips with
+which it will not work.  If you tell me, I might fix it.
 
 Included are the following packages:
 
@@ -29,8 +28,6 @@ Included are the following packages:
 
 To build this module, run the usual
 
-  gzip -dc ExtUtils-DynaLib-0.XX.tar.gz | tar xf -
-  cd ExtUtils-DynaLib-0.XX
   perl Makefile.PL
   make test
 

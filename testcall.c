@@ -18,7 +18,7 @@
 #include <malloc.h>
 #endif
 
-#ifdef __BORLANDC__
+#ifndef SIGSEGV
 #include <signal.h>
 #endif
 

@@ -44,6 +44,10 @@ Borland C++ (but probably not repeatably ;-) )
 	Added testcall configuration utility to find system
 dependencies for cdecl convention.  Rewrote some docs.
 
-0.31  
+0.31  Thu Aug 28 23:42  1997
 	Digital Unix on the Alpha is supported, at least for gcc,
 thanks to help from Achim Bohnet <ach@mpe.mpg.de>.  Added PTR_TYPE.
+
+0.50  Sat Sep 27 01:35:55  1997
+	Much nicification and many added arg/return types.  Rewrote
+a lot of the guts.

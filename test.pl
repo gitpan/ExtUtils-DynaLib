@@ -6,9 +6,9 @@
 # Change 1..1 below to 1..last_test_to_print .
 # (It may become useful if the test is moved to ./t subdirectory.)
 
-BEGIN { $| = 1; print "1..8\n"; }
+BEGIN { $^W = 0; $| = 1; print "1..10\n"; }
 END {print "not ok 1\n" unless $loaded;}
-use ExtUtils::DynaLib qw(DeclareSub);
+use ExtUtils::DynaLib ();
 $loaded = 1;
 print "ok 1\n";
 
@@ -24,10 +24,9 @@ eval {
     $SIG{ILL} = $SIG{SEGV};
 };
 
-unless (defined(&DeclareSub)) {
-  # Perl 5.003's Exporter behaved differently.
-  sub DeclareSub { &ExtUtils::DynaLib::DeclareSub }
-}
+# Don't let old Exporters ruin our fun.
+sub DeclareSub { &ExtUtils::DynaLib::DeclareSub }
+sub PTR_TYPE { &ExtUtils::DynaLib::PTR_TYPE }
 
 $num = 2;
 sub assert {
@@ -82,7 +81,7 @@ if ($@ || ! $pow) {
 }
 
 $strlen = $libc->DeclareSub ({ "name" => "strlen",
-				"return" => "int",
+				"return" => "i",
 				"args" => ["p"],
 			    });
 
@@ -120,7 +119,7 @@ sub my_sprintf {
 			  }
 	       }
 		      my $buffer = "\0" x $width;
-		      &{$libc->DeclareSub("sprintf", "void", @arg_types)}
+		      &{$libc->DeclareSub("sprintf", "", @arg_types)}
 			($buffer, $fmt, @args);
 		      $buffer =~ s/\0.*//;
 		      return $buffer;
@@ -142,7 +141,7 @@ $ptr_len = length(pack("p", $tmp = "foo"));
 $fopen_ptr = DynaLoader::dl_find_symbol($libc->LibRef(), "fopen")
     or die DynaLoader::dl_error();
 $fopen = DeclareSub ({ "ptr" => $fopen_ptr,
-		       "return" => ExtUtils::DynaLib::PTR_TYPE,
+		       "return" => PTR_TYPE,
 		       "args" => ["p", "p"] });
 
 open TEST, ">tmp.tmp"
@@ -156,20 +155,20 @@ if (! $fp) {
     assert(0);
 } else {
     # Hope "I" will work for type size_t!
-    $fread = $libc->DeclareSub("fread", "int",
-				"P", "I", "I", ExtUtils::DynaLib::PTR_TYPE);
+    $fread = $libc->DeclareSub("fread", "i",
+				"P", "I", "I", PTR_TYPE);
     $buffer = "\0" x 4;
     $result = &$fread($buffer, 1, length($buffer), $fp);
     assert($result == 4, $buffer, "a st");
-    unlink "tmp.tmp";
 }
+unlink "tmp.tmp";
 
 if (@$ExtUtils::DynaLib::Callback::Config) {
     sub compare_lengths {
 	# Not a model of efficiency, only a test of functionality!!
 	my ($ppa, $ppb) = @_;
-	my $pa = unpack("P$ptr_len", pack(ExtUtils::DynaLib::PTR_TYPE, $ppa));
-	my $pb = unpack("P$ptr_len", pack(ExtUtils::DynaLib::PTR_TYPE, $ppb));
+	my $pa = unpack("P$ptr_len", pack(PTR_TYPE, $ppa));
+	my $pb = unpack("P$ptr_len", pack(PTR_TYPE, $ppb));
 	my $A = unpack("p", $pa);
 	my $B = unpack("p", $pb);
 	length($A) <=> length($B);
@@ -182,11 +181,11 @@ if (@$ExtUtils::DynaLib::Callback::Config) {
     # "::compare_lengths", but not "compare_lengths".
     #
     $callback = new ExtUtils::DynaLib::Callback(\&compare_lengths, "i",
-						ExtUtils::DynaLib::PTR_TYPE,
-						ExtUtils::DynaLib::PTR_TYPE);
+						PTR_TYPE,
+						PTR_TYPE);
 
-    $qsort = $libc->DeclareSub("qsort", "void",
-			       "P", "I", "I", ExtUtils::DynaLib::PTR_TYPE);
+    $qsort = $libc->DeclareSub("qsort", "",
+			       "P", "I", "I", PTR_TYPE);
     &$qsort($array, scalar(@list), length($array) / @list, $callback->Ptr());
 
     @expected = sort { length($a) <=> length($b) } @list;
@@ -195,22 +194,56 @@ if (@$ExtUtils::DynaLib::Callback::Config) {
 
     # Hey!  We've got callbacks.  We've got a way to call them.
     # Who needs libraries?
+    undef $callback;
     $callback = new ExtUtils::DynaLib::Callback(sub {
 	$_[0] + 10*$_[1] + 100*$_[2];
     }, "i", "i", "p", "i");
-    $foo = DeclareSub($callback->Ptr(), "i", "i", "p", "i");
+    $sub = DeclareSub($callback->Ptr(), "i", "i", "p", "i");
 
-    $got = &$foo(1, $tmp = 7, 3.14);
+    $got = &$sub(1, $tmp = 7, 3.14);
     $expected = 371;
     assert(1, $got, $expected);
+
+    undef $callback;
+    $callback = new ExtUtils::DynaLib::Callback(sub { shift }, "I", "i");
+    $sub = DeclareSub($callback->Ptr(), "I", "i");
+    $got = &$sub(-1);
+
+    # Can't do this because it's broken in too many Perl versions:
+    # $expected = unpack("I", pack("i", -1));
+    $expected = 0;
+    for ($i = 1; $i > 0; $i <<= 1) {
+      $expected += $i;
+    }
+    $expected -= $i;
+    assert(1, $got, $expected);
+
+    $int_size = length(pack("i",0));
+    undef $callback;
+    $callback = new ExtUtils::DynaLib::Callback(sub {
+	  $global = shift;
+	  $global .= pack("i", shift);
+	  return unpack(PTR_TYPE, pack("P", $global));
+	},
+	PTR_TYPE, "P".(2 * $int_size), "i");
+    $sub = DeclareSub($callback->Ptr(), "P".(3 * $int_size),
+	PTR_TYPE, "i");
+    $array = pack("ii", 1729, 31415);
+    $pointer = unpack(PTR_TYPE, pack("P", $array));
+    $struct = &$sub($pointer, 253);
+    @got = unpack("iii", $struct);
+    assert(1, "[@got]", "[1729 31415 253]");
+
 } else {
     warn("Skipping callback tests on this platform\n");
+    assert(1);
+    assert(1);
     assert(1);
     assert(1);
 }
 
 $buf = "willo";
-ExtUtils::DynaLib::Poke(unpack(ExtUtils::DynaLib::PTR_TYPE,
+ExtUtils::DynaLib::Poke(unpack(PTR_TYPE,
 			       pack("p", $buf)), "he");
 assert(1, $buf, "hello");
 

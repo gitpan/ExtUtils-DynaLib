@@ -1,10 +1,13 @@
 =pod
 
 This file is a Perl program that tests the ExtUtils::DynaLib package
-on Windows 95.  To run it after installation, type `perl <this-file>
-<sysdir>' where <sysdir> is the Windows system directory (the default
-is \WINDOWS\SYSTEM).  If successful, it will create a window with a
-message in the center.
+on Windows 95.  It might work on iX86 NT, but I wouldn't place bets
+beyond that.  To run it after installation, type `perl <this-file>'.
+If you want to run it before installing the module, your best bet is
+to rename test.pl to something like test.bak.pl, rename this file
+test.pl, and do `make test' (or nmake, or dmake, whatever make you
+use).  If successful, it will create a window with a message in the
+center.
 
 The program is modeled after the kind of "hello world" examples found
 in introductory books on Windows programming in C.  However, Perl
@@ -13,24 +16,51 @@ someone has written a Cpp module that I don't know about?)  Therefore,
 all function declarations and constants from <windows.h> are
 hard-coded.
 
-This is not a happy state-of-affairs for would-be Perl Windows
+This is not a happy state of affairs for would-be Perl Windows
 programmers.  Someday maybe there will be a fancy AutoLoading module
 that reads C header files and lets us use preprocessor macros.  For
 now though, if you want to make direct API calls without writing
 specialized XS code, this is the best way I know how.
 
-One final note.  This is a demo/test program.  This is not necessarily
-good coding style.
+Another difficulty is the use of resources.  Windows resources are
+binary data associated with an application; for example, menus,
+bitmaps, and dialog box templates.  Typically, resources are linked
+into the program's .exe file.  Of course, Perl programs are text and
+don't use the binary format which can contain resources.  Although it
+is possible to construct at run time the objects which would otherwise
+be stored as resources, this is rather wasteful and complicated.
+
+One alternative is to put the resources in a DLL or EXE which the Perl
+program would then load via LoadLibrary().  A more radical solution
+would be to generate a cross-breed file which has the EXE format and
+is at the same time parsable by perl.  A similar principle is used by
+the pl2bat utility in the Win32 Perl distribution.  However, the
+"Portable Executable" format used by Win32 is quite a bit nastier on
+text editors than are .bat files.  Wordpad, for instance, won't open
+them at all, and Notepad leaves them hopelessly corrupt when you save.
+
+Be that as it may, I have developed a pl2exe program that does what
+its name suggests.  It takes a perl script and adds some stuff at the
+beginning to make it have the PE format (well, close enough to fool
+Windows).  When executed, the program invokes perl on itself the way a
+pl2bat script does (and avoids the 9-argument limit on Windows 95,
+btw).  The thing lacking in pl2exe that would make it really useful is
+a way to link in resources without disrupting the delicate PE/script
+balance.  Maybe someday.
+
+One final note about this file.  This is a demo/test program.  It is
+not necessarily good coding style.
 
 =cut
+
+use 5.00402;
 
 use ExtUtils::DynaLib;
 use ExtUtils::DynaLib::Struct;
 use strict;
 
-my $sysdir = shift || "\\WINDOWS\\SYSTEM";
-my $user32 = new ExtUtils::DynaLib("$sysdir\\USER32.DLL");
-my $gdi32 = new ExtUtils::DynaLib("$sysdir\\GDI32.DLL");
+my $user32 = new ExtUtils::DynaLib("USER32");
+my $gdi32 = new ExtUtils::DynaLib("GDI32");
 
 #typedef struct _WNDCLASS {    // wc
 #
@@ -54,7 +84,7 @@ Define ExtUtils::DynaLib::Struct('WNDCLASS',
         I => ['hIcon'],
         I => ['hCursor'],
         I => ['hbrBackground'],
-        I => ['lpszMenuName'],  # should be p, but can't pack NULL (yet)
+        p => ['lpszMenuName'],
         p => ['lpszClassName'],
 );
 
@@ -109,6 +139,9 @@ my $DispatchMessage = $user32->DeclareSub("DispatchMessageA",
 	"i",
         "P");
 
+#
+# Main window's callback.
+#
 sub window_proc {
 	my ($hwnd, $uMsg, $wParam, $lParam) = @_;
 
@@ -139,6 +172,9 @@ sub window_proc {
 my $wnd_proc = new ExtUtils::DynaLib::Callback(
 	\&window_proc, "i", "i", "i", "i", "i");
 
+#
+# Register the window class.
+#
 my $wc;
 my $rwc = tie $wc, 'WNDCLASS';
 $rwc->style(0x0003);	# CS_HREDRAW | CS_VREDRAW
@@ -148,8 +184,11 @@ $rwc->hIcon(&$LoadIcon(0, 32512));
 $rwc->hCursor(&$LoadCursor(0, 32512));
 $rwc->hbrBackground(&$GetStockObject(0));  # WHITE_BRUSH
 $rwc->lpszClassName("w32test");
-
 &$RegisterClass($wc) or die "can't register window class";
+
+#
+# Create the window.
+#
 my $title_text = "Perl Does Win32";
 my $hwnd = &$CreateWindowEx(0, $rwc->lpszClassName,
 	$title_text,
@@ -161,6 +200,9 @@ my $hwnd = &$CreateWindowEx(0, $rwc->lpszClassName,
 &$ShowWindow($hwnd, 10);	# SW_SHOWDEFAULT
 &$UpdateWindow($hwnd);
 
+#
+# Message loop.
+#
 my $msg = "\0" x 64;
 while (&$GetMessage($msg, 0, 0, 0)) {
 	&$TranslateMessage($msg);

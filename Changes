@@ -1,0 +1,25 @@
+Revision history for Perl extension CLib.
+
+0.01  Thu Jun 12 01:17:41 1997
+	- original version; created by h2xs 1.18
+
+0.02  Sat Jun 14 19:22:36  1997
+	First release, only "cdecl" convention supported.
+
+0.03  Sun Jun 15 22:56:26  1997
+	Fixed problem with Perl prototypes.
+
+0.04  Tue Jun 17 04:15:57  1997
+	Generalized the default calling convention; constructor
+accepts filename; declare_sub accepts function pointer; added ``hack30''
+calling convention
+
+0.10  Wed Jun 18 13:31:07 EDT 1997
+	Got `hack30' to return ints correctly on sparc/solaris.
+Made compatible with perl 5.003.
+
+0.11  Thu Jun 19 23:43:29  1997
+	Added sparc convention.
+
+0.12  Sun Jun 22 10:34:21  1997
+	Minor stuff.  Renamed to ExtUtils::DynaLib.

@@ -1,0 +1,84 @@
+Here I describe how I got this module to pop up a message box under
+CygWin32 (b18, Windows 95).  To do more interesting GUI programming
+will require a Callback class, which I intend to write at some point.
+
+First of all, you should be aware that getting perl to do dynamic
+loading at all with CygWin required some unpleasant hacks.  In
+particular, the perl5.004 DynaLoader for cygwin32 expects all loaded
+libraries to contain a symbol called "impure_setup".
+
+Most Windows DLLs other than Perl modules do not contain such a
+symbol.  We have to patch DynaLoader so that it won't give up when it
+loads a DLL without an impure_setup function.  The file to be patched
+is under the perl5.004_01 source as ext/DynaLoader/dl_cygwin32.xs.
+The patch is as follows:
+
+########################### BEGIN PATCH #########################
+*** dl_cygwin32.xs	Sat May 31 12:21:32 1997
+--- dl_cygwin32.xs	Sat Jun 28 18:38:30 1997
+***************
+*** 97,112 ****
+      else{
+  	// setup the dll's impure_ptr:
+  	impure_setupptr = GetProcAddress(RETVAL, "impure_setup");
+! 	if( impure_setupptr == NULL){
+! 		printf(
+!     "Cygwin32 dynaloader error: could not load impure_setup symbol\n");
+! 		RETVAL = NULL;		
+! 	}
+! 	else{
+  		// setup the DLLs impure_ptr:
+  		(*impure_setupptr)(_impure_ptr);
+- 		sv_setiv( ST(0), (IV)RETVAL);
+  	}
+     }
+  	
+  
+--- 97,107 ----
+      else{
+  	// setup the dll's impure_ptr:
+  	impure_setupptr = GetProcAddress(RETVAL, "impure_setup");
+! 	if( impure_setupptr != NULL){
+  		// setup the DLLs impure_ptr:
+  		(*impure_setupptr)(_impure_ptr);
+  	}
++ 	sv_setiv( ST(0), (IV)RETVAL);
+     }
+  	
+  
+########################## END PATCH #########################
+
+After applying this patch, you must remake perl.exe.
+
+This module should be configured with `perl Makefile.PL DECL=cdecl'.
+The test will fail because DynaLoader can't find a dynamic C library.
+Save the following perl program as `test.pl', replacing
+"C:\\WINDOWS\\SYSTEM\\USER32.DLL" with the name of your user32.dll.
+Then do `make test'.  Now you know how to write Windows programs in
+Perl!
+
+######################## BEGIN test.pl ##########################
+use ExtUtils::DynaLib;
+
+$user = new ExtUtils::DynaLib("C:\\WINDOWS\\SYSTEM\\USER32.DLL");
+$MessageBox = $user->declare_sub("MessageBoxA",
+	"int", "I", "p", "p", "I");
+
+$text = "Hello from Perl!\nDo you like what you see?";
+$caption = "Message Box";
+$type = 35;  # MB_ICONQUESTION | MB_YESNOCANCEL
+$result = $MessageBox->(0, $text, $caption, $type);
+
+if ($result == 2) {
+	$answer = "Cancel";
+} elsif ($result == 6) {
+	$answer = "Yes";
+} elsif ($result == 7) {
+	$answer = "No";
+} else {
+	die "Unexpected return value: $result\n";
+}
+
+$text = "You chose \"$answer\"";
+$MessageBox->(0, $text, $caption, 0);
+######################## END test.pl ##########################

@@ -52,11 +52,12 @@ and tell me of your success or failure.
 
 COPYRIGHT
 
-This file and its accompanying materials are Copyright (c) 1997 by
-John Tobey.  They may be modified, distributed and used under the same
-conditions as Perl itself.  Of course, there is no express or implied
-warranty.  See the file README in the top-level Perl source directory
-for more information.
+The files named in MANIFEST, accompanying this file, are Copyright (c)
+1997 by John Tobey.  They may be modified, distributed and used under
+the same conditions as Perl itself.  Of course, there is no express or
+implied warranty.  See the file README in the top-level Perl source
+directory for more information.
 
 Enjoy!
-jtobey@user1.channel1.com
+-John
+jtobey@channel1.com

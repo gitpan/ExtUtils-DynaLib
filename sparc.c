@@ -18,7 +18,7 @@ int (*func)();
   register int i, j;
   int stack_needed = 0;
 
-  for (i = 1; i < items; ) {
+  for (i = DYNALIB_ARGSTART; i < items; ) {
     arg_scalar = SvPV(ST(i), arg_len);
     i++;
     check_len = nbytes + arg_len;

@@ -16,9 +16,9 @@ void *func;
 #if CDECL_ONE_BY_ONE
 
 #if CDECL_REVERSE
-  for (i = 1; i < items; i++) {
+  for (i = DYNALIB_ARGSTART; i < items; i++) {
 #else  /* ! CDECL_REVERSE */
-  for (i = items - 1; i >= 1; i--) {
+  for (i = items - 1; i >= DYNALIB_ARGSTART; i--) {
 #endif  /* ! CDECL_REVERSE */
     arg_scalar = SvPV(ST(i), arg_len);
     arg_on_stack = alloca(arg_len);
@@ -27,18 +27,15 @@ void *func;
 #else  /* ! CDECL_ONE_BY_ONE */
   STRLEN total_arg_len = 0;
 
-  for (i = items; i-- > 1; ) {
+  for (i = items; i-- > DYNALIB_ARGSTART; ) {
     (void) SvPV(ST(i), arg_len);
     total_arg_len += arg_len;
   }
   arg_on_stack = (char *) alloca(total_arg_len) + CDECL_ADJUST;
-#if CDECL_SUBTRACT_CURRENT
-  arg_on_stack -= (sizeof ax + sizeof items + sizeof func);
-#endif  /* CDECL_SUBTRACT_CURRENT */
 #if CDECL_REVERSE
-  for (i = items - 1; i >= 1; i--) {
+  for (i = items - 1; i >= DYNALIB_ARGSTART; i--) {
 #else  /* ! CDECL_REVERSE */
-  for (i = 1; i < items; i++) {
+  for (i = DYNALIB_ARGSTART; i < items; i++) {
 #endif  /* ! CDECL_REVERSE */
     arg_scalar = SvPV(ST(i), arg_len);
     Copy(arg_scalar, arg_on_stack, arg_len, char);

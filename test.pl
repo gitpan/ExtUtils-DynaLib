@@ -136,11 +136,13 @@ $got = my_sprintf($fmt, @args);
 
 assert(1, $got, $expected);
 
+$ptr_len = length(pack("p", $tmp = "foo"));
+
 # Try passing a pointer to DeclareSub.
 $fopen_ptr = DynaLoader::dl_find_symbol($libc->LibRef(), "fopen")
     or die DynaLoader::dl_error();
 $fopen = DeclareSub ({ "ptr" => $fopen_ptr,
-		       "return" => "ptr",
+		       "return" => ExtUtils::DynaLib::PTR_TYPE,
 		       "args" => ["p", "p"] });
 
 open TEST, ">tmp.tmp"
@@ -153,9 +155,9 @@ $fp = &$fopen($tmp1 = "tmp.tmp", $tmp2 = "r");
 if (! $fp) {
     assert(0);
 } else {
-    # Hope "I" will work for types size_t and (FILE *)!
+    # Hope "I" will work for type size_t!
     $fread = $libc->DeclareSub("fread", "int",
-				"P", "I", "I", "I");
+				"P", "I", "I", ExtUtils::DynaLib::PTR_TYPE);
     $buffer = "\0" x 4;
     $result = &$fread($buffer, 1, length($buffer), $fp);
     assert($result == 4, $buffer, "a st");
@@ -163,12 +165,11 @@ if (! $fp) {
 }
 
 if (@$ExtUtils::DynaLib::Callback::Config) {
-    $ptr_len = length(pack("p", $tmp = "foo"));
     sub compare_lengths {
 	# Not a model of efficiency, only a test of functionality!!
 	my ($ppa, $ppb) = @_;
-	my $pa = unpack("P$ptr_len", pack("i", $ppa));
-	my $pb = unpack("P$ptr_len", pack("i", $ppb));
+	my $pa = unpack("P$ptr_len", pack(ExtUtils::DynaLib::PTR_TYPE, $ppa));
+	my $pb = unpack("P$ptr_len", pack(ExtUtils::DynaLib::PTR_TYPE, $ppb));
 	my $A = unpack("p", $pa);
 	my $B = unpack("p", $pb);
 	length($A) <=> length($B);
@@ -181,9 +182,11 @@ if (@$ExtUtils::DynaLib::Callback::Config) {
     # "::compare_lengths", but not "compare_lengths".
     #
     $callback = new ExtUtils::DynaLib::Callback(\&compare_lengths, "i",
-						"i", "i");
+						ExtUtils::DynaLib::PTR_TYPE,
+						ExtUtils::DynaLib::PTR_TYPE);
 
-    $qsort = $libc->DeclareSub("qsort", "void", "P", "I", "I", "I");
+    $qsort = $libc->DeclareSub("qsort", "void",
+			       "P", "I", "I", ExtUtils::DynaLib::PTR_TYPE);
     &$qsort($array, scalar(@list), length($array) / @list, $callback->Ptr());
 
     @expected = sort { length($a) <=> length($b) } @list;
@@ -207,7 +210,8 @@ if (@$ExtUtils::DynaLib::Callback::Config) {
 }
 
 $buf = "willo";
-ExtUtils::DynaLib::Poke(unpack("i", pack("p", $buf)), "he");
+ExtUtils::DynaLib::Poke(unpack(ExtUtils::DynaLib::PTR_TYPE,
+			       pack("p", $buf)), "he");
 assert(1, $buf, "hello");
 
 # Can't unload libraries (portably, yet) because DynaLoader does not

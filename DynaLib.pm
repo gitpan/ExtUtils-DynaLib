@@ -40,14 +40,20 @@ functions
 			} );
   $result = $func->( @args );
 
+  use ExtUtils::DynaLib qw(PTR_TYPE);
+  $type = PTR_TYPE;  # see below
+
   $callback = new ExtUtils::DynaLib::Callback( \&my_sub,
 			$return_type, @arg_types );
   $callback_pointer = $callback->Ptr();
 
 =head1 DESCRIPTION
 
-This module allows Perl programs to link with dynamic libraries and
-call their functions on the fly.
+This module allows Perl programs to call C functions in dynamic
+libraries.  Usually, the same effect may be achieved with greater
+stability, portability, and robustness by a specialized XS module.
+See L<perlxs(1)>.  This module is most useful for testing library
+functions and writing simple programs without the bother of XS.
 
 The mechanics of passing arguments and returning values,
 unfortunately, depend on your machine, operating system, and compiler.
@@ -58,7 +64,7 @@ a test program before the module is built.
 
 The argument to C<new> may be the file name of a shared library.
 Alternatively, a linker command-line argument (e.g., "-lc") may be
-specified.  See DynaLoader(3) for details on how such arguments are
+specified.  See L<DynaLoader(3)> for details on how such arguments are
 mapped to file names.
 
 =head2 Declaring a library routine
@@ -79,7 +85,9 @@ library function name, the second is the function return type, and the
 rest are function argument types.
 
 C data types are specified using the codes used by Perl's C<pack> and
-C<unpack> operators.  See L<perlfunc(1)>.
+C<unpack> operators.  See L<perlfunc(1)>.  As a convenience (and to
+hide system dependencies), C<PTR_TYPE> is defined as a code suitable
+for pointer types (typically "i").
 
 The arguments to C<DeclareSub> are as follows:
 
@@ -100,24 +108,24 @@ specified in the method forms.
 
 The return type of the function, encoded for use with the C<pack>
 operator.  Currently supported values are "" (void), "i" (int), "d"
-(double), "p" (a NUL-terminated character string), and "ptr" (any
-pointer type, usually equivalent to "i"; this is not a C<pack> code
-because there isn't one for generic pointers that aren't
-dereferenced).
+(double), "p" (a NUL-terminated character string), and C<PTR_TYPE> (a
+generic pointer type, different from "p" in that the pointer is not
+dereferenced during unpacking).
 
 =item C<args>
 
 A list of the types of arguments expected by the function, specified
-using the notation of Perl's C<pack> operator (see perlfunc(1)).  For
-example, "i" means an integer, "d" means a double, "p" means a
-NUL-terminated string pointer.
+using the notation of Perl's C<pack> operator (see L<perlfunc(1)>).
+For example, "i" means an integer, "d" means a double, "p" means a
+NUL-terminated string pointer.  If you need to handle pointers to
+things other than Perl scalars, use type C<PTR_TYPE>.
 
 Note: you probably don't want to use "c" or "s" here, since C normally
 converts the corresponding types (C<char> and C<short>) to C<int> when
-passing them to a function.  The ExtUtils::DynaLib package does not
-perform such conversions.  Use "i" instead.  Likewise, use "I" in
+passing them to a function.  The ExtUtils::DynaLib package may or may
+not perform such conversions.  Use "i" instead.  Likewise, use "I" in
 place of "C" or "S", and "d" in place of "f".  Stick with "i", "d",
-and "p" unless you know what you are doing.
+"p", "P", and C<PTR_TYPE> unless you are sure of what you are doing.
 
 =item C<decl>
 
@@ -157,13 +165,12 @@ A callback's argument and return types are specified using C<pack>
 codes, as described above for library functions.  Currently, the
 return value must be interpretable as type C<int> or C<void>, so the
 only valid codes are "i" and "".  The first argument must be of type
-"i" (or possibly "p" on machines where integers are the same size as
-pointers).  For argument positions beyond the first, the permissible
-types are "i", "p", and "d".  These limitations are considered bugs to
+"i", "p", or C<PTR_TYPE>.  For argument positions beyond the first,
+type "d" is allowed as well.  These limitations are considered bugs to
 be fixed someday.
 
 To enable a Perl sub to be used as a callback, you must construct an
-object of class ExtUtils::DynaLib::Callback.  The syntax is
+object of class C<ExtUtils::DynaLib::Callback>.  The syntax is
 
   $cb_ref = new ExtUtils::DynaLib::Callback( \&some_sub,
                     $ret_type, @arg_types );
@@ -232,23 +239,24 @@ them in, based on its calling convention and the types C<double> and
 C<char *>.  Another specific instruction sequence stores the return
 value in the variable C<res>.
 
-But when you compile this module, it must be general enough to handle
-all sorts of function argument and return types.
+But when you compile the C code in this module, it must be general
+enough to handle all sorts of function argument and return types.
 
 "Why not use varargs/stdarg?"  Most C compilers support a special set
 of macros that allow a function to receive a variable number of
 arguments of variable type.  When the function receiving the arguments
-is compiled, it does not know how it will be called.
+is compiled, it does not know with what argument types it will be
+called.
 
-But the code that calls such a function does know, at compile time,
-how many and what type of arguments it is passing to the varargs
+But the code that I<calls> such a function I<does> know at compile
+time how many and what type of arguments it is passing to the varargs
 function.  There is no "reverse stdarg" standard for passing types to
 be determined at run time.  You can't simply pass a C<va_list> to a
 function unless that function is defined to receive a C<va_list>.
-This module does use varargs/stdarg where appropriate, but the only
+This module uses varargs/stdarg where appropriate, but the only
 appropriate place is in the callback support.
 
-=head2 The solution
+=head2 The solution (well sort of)
 
 Having failed to find a magic bullet to spare us from the whims of
 system designers and compiler writers, we are forced to examine the
@@ -266,10 +274,12 @@ can be helpful in this regard, and if your compiler can output
 assembly code, that helps, too.
 
 However, this is Perl, Perl is meant to be ported, and assembly
-language is not portable.  As of today, this module contains no
-assembly, though this may change in the future.
+language is often not portable.  This module generally uses C
+constructs that happen to work most of the time, as opposed to
+assembly code that follows the conventions faithfully.  I expect the
+use of assembly language to increase, however.
 
-By avoiding the use of assembly, we lose some reliability and
+By minimizing the use of assembly, we lose some reliability and
 flexibility.  By loss of reliability, I mean we can expect crashes,
 especially on untested platforms.  Lost flexibility means having
 restrictions on what parameter types and return types are allowed.
@@ -315,21 +325,31 @@ on the stack.  Then the C function is called as if it expected six
 integer arguments.  On a Sparc, the six "pseudo-arguments" are passed
 in special registers.
 
+=item C<alpha>
+
+This is similar to the C<sparc> convention, but the pseudo-arguments
+have type C<long> instead of C<int>, and all arguments are extended to
+8 bytes before being placed in the array.  On the Alpha, a special
+sequence of inline assembly instructions is used to ensure that any
+function parameters of type C<double> are passed correctly.
+Currently, this code works only with the GNU C Compiler, so passing
+doubles with other compilers is unsupported.
+
 =item C<hack30>
 
 This is not really a calling convention, it's just some C code that
-will successfully call a function most of the time on most systems
-tested so far.  All arguments are copied into an array of 6 integers
+will successfully call a function most of the time on a variety of
+systems.  All arguments are copied into an array of 6 long integers
 (or 30 if 6 is not enough).  The function is called as if it expected
-6 (or 30) integer arguments.
+6 (or 30) long arguments.
 
 You will run into problems if the C function either (1) takes more
-arguments than can fit in the integer array, (2) takes some
-non-integer arguments on a system that passes them differently from
-ints (but C<cdecl> currently has the same flaw), or (3) cares if it is
-passed extra arguments.  (This appears to crash certain Win32
-functions including C<RegisterClassA()>, which is used in the demo
-program in the README.win32 file.)
+arguments than can fit in the array, (2) takes some non-long arguments
+on a system that passes them differently from longs (but C<cdecl>
+currently has the same flaw), or (3) cares if it is passed extra
+arguments (this is apparently what crashes certain Win32 functions
+including C<RegisterClassA()>, which is used in the demo program in
+the README.win32 file).
 
 Because of these problems, the use of C<hack30> is recommended only as
 a quick fix until your system's calling convention is supported.
@@ -351,10 +371,8 @@ not known at compile time.
 Although some effort is made in Makefile.PL to find out how parameters
 are passed in C, this applies only to the integer type (Perl's C<I32>,
 to be precise; see L<perlguts(1)>).  Functions that recieve or return
-type C<double>, for example, will not work on systems that use
-floating-point registers for this purpose.  To fix this will require
-changes to the C and XS code, as well as DynaLib.pm, though probably
-not to the documented public interface.
+type C<double>, for example, may not work on systems that use
+floating-point registers for this purpose.
 
 =head2 Robustness
 
@@ -367,10 +385,10 @@ occur if the C or XS code is faulty.  However, once the XS module has
 been sufficiently debugged, one can be reasonably sure that it will
 work right.
 
-C code called through this module is devoid of such protection.  Since
-the association between Perl and C is made at run time, errors due to
+C code called through this module lacks this protection.  Since the
+association between Perl and C is made at run time, errors due to
 incompatible library interfaces or incorrect assumptions have a much
-greater chance of causing a crash than with either static or XS code.
+greater chance of causing a crash than with either core or XS code.
 
 =head2 Security
 
@@ -379,8 +397,8 @@ implications of this module may be.  Use at your own risk.
 
 =head2 Deallocation of Resources
 
-To maximize portability, this module uses the DynaLoader(3) interface
-to shared library linking.  DynaLoader's main purpose is to support XS
+To maximize portability, this module uses the DynaLoader interface to
+shared library linking.  DynaLoader's main purpose is to support XS
 modules, which are loaded once by a program and not (to my knowledge)
 unloaded.  It would be nice to be able to free the libraries loaded by
 this module when they are no longer needed.  This is impossible, since
@@ -388,37 +406,36 @@ DynaLoader currently provides no means to do so.
 
 =head2 Literal and temporary strings
 
-Until Perl 5.00402, it was impossible to pass a string literal as a
+Before Perl 5.00402, it was impossible to pass a string literal as a
 pointer-to-nul-terminated-string argument of a C function.  For
 example, the following statement (incorrectly) produced the error
 "Modification of a read-only value attempted":
 
-  $strncmp->("foo", "bar", 3);
+  &$strncmp("foo", "bar", 3);
 
 To work around this problem, one must assign the value to a variable
 and pass the variable in its place, as in
 
-  $strncmp->($dummy1 = "foo", $dummy2 = "bar", 3);
+  &$strncmp($dummy1 = "foo", $dummy2 = "bar", 3);
 
 =head2 Callbacks
 
-The Callback code is non-reentrant.  And it assumes that pointers are
-C<pack>able as "I".  Callbacks can mess up the message printed by
-C<die> in the presence of nested C<eval>s.
+The Callback code uses global static data.  Callbacks can mess up the
+message produced by C<die> in the presence of nested C<eval>s.
 
 =head2 Miscellaneous
 
 There are far too many restrictions on what C data types may be used.
-Using argument types with size not a multiple of the machine word size
-may have nasty results.  The techniques used to pass values to and
-from C functions are all rather hackish and not officially sanctioned.
-Assembly would be more robust, if less portable.
+Using argument types with size not a multiple of the machine stack
+width may have nasty results.  The techniques used to pass values to
+and from C functions are all rather hackish and nonstandard.  Assembly
+code would be more complete.
 
 =head1 TODO
 
-Fiddle with autoloading so we don't have to call DeclareSub all the
-time.  Mangle C++ symbol names.  Get Perl to understand C header
-files.
+Fix the bugs (see above).  Fiddle with autoloading so we don't have to
+call DeclareSub all the time.  Mangle C++ symbol names.  Get Perl to
+understand C header files (macros and function declarations).
 
 =head1 LICENSE
 
@@ -428,7 +445,7 @@ warranty, since it is free software.  See the file README in the top
 level Perl source directory for details.  The Perl source may be found
 at
 
-  http://www.perl.com/CPAN/src
+  http://www.perl.com/CPAN/src/
 
 =head1 AUTHOR
 
@@ -442,29 +459,59 @@ perlxs(1), perlcall(1).
 =cut
 
 
+#'
+
 use strict;
+no strict 'refs';
 use Carp;
-use vars qw($VERSION @ISA @EXPORT @EXPORT_OK $DefConv);
-use subs qw(new LibRef DeclareSub);
+use vars qw($VERSION @ISA $AUTOLOAD @EXPORT @EXPORT_OK $DefConv);
+use subs qw(AUTOLOAD new LibRef DeclareSub DYNALIB_DEFAULT_CONV PTR_TYPE);
 
 @EXPORT = ();
-@EXPORT_OK = qw(Poke DeclareSub);
+@EXPORT_OK = qw(Poke DeclareSub PTR_TYPE);
 
 require DynaLoader;
 require Exporter;
 
 @ISA = qw(DynaLoader Exporter);
-$VERSION = '0.30';
+$VERSION = '0.31';
 bootstrap ExtUtils::DynaLib $VERSION, \$ExtUtils::DynaLib::Callback::Config;
-$DefConv = default_convention();
+
+
+sub AUTOLOAD {
+  my $constname;
+  ($constname = $AUTOLOAD) =~ s/.*:://;
+  my $val = constant($constname);
+  $! and croak "Undefined subroutine &$AUTOLOAD called";
+  eval "sub $AUTOLOAD { '$val' }";
+  goto &$AUTOLOAD;
+}
+
+$DefConv = DYNALIB_DEFAULT_CONV;
 
 # Cache of loaded lib refs.  Maybe best left to DynaLoader?
 my %loaded_libs = ();
 
+my %suffix_map = (
+	''		=> '_void_call_packed',
+	'void'		=> '_void_call_packed',
+	'i'		=> '_int_call_packed',
+	'int'		=> '_int_call_packed',
+	'd'		=> '_double_call_packed',
+	'double'	=> '_double_call_packed',
+	'p'		=> '_string_call_packed',
+	'string'	=> '_string_call_packed',
+);
+if (defined (&{DYNALIB_DEFAULT_CONV . '_quad_call_packed'})) {
+  $suffix_map{'q'} = '_quad_call_packed';
+}
+# the use of 'ptr' is deprecated.
+$suffix_map{'ptr'} = $suffix_map{PTR_TYPE()};
+
 sub new {
     my $class = shift;
     scalar(@_) == 1
-	or croak "Usage: \$lib = new ExtUtils::DynaLib \"-lc\" (for example)";
+	or croak 'Usage: $lib = new ExtUtils::DynaLib "-lc" (for example)';
     my ($libname) = @_;
     return $loaded_libs{$libname} if exists($loaded_libs{$libname});
     my $so = $libname;
@@ -507,25 +554,13 @@ sub DeclareSub {
 	@arg_type = @_;
     }
     unless ($ptr) {
-	$libref ||= $self->LibRef()
-	    if $is_method;
-	$libref
+	$libref ||= $is_method && $self->LibRef()
 	    or croak 'ExtUtils::DynaLib::DeclareSub: non-method form requires a "ptr" or "libref"';
 	$ptr = DynaLoader::dl_find_symbol($libref, $name)
 	    or croak "Can't find symbol \"$name\": ", DynaLoader::dl_error();
     }
 
-    my $glue_sub_suffix = {
-	""		=> "_void_call_packed",
-	"void"		=> "_void_call_packed",
-	"i"		=> "_int_call_packed",
-	"int"		=> "_int_call_packed",
-	"d"		=> "_double_call_packed",
-	"double"	=> "_double_call_packed",
-	"p"		=> "_string_call_packed",
-	"string"	=> "_string_call_packed",
-	"ptr"		=> "_ptr_call_packed",
-    }->{$ret_type}
+    my $glue_sub_suffix = $suffix_map{$ret_type}
 	or confess "Unsupported function return type: \"$ret_type\"";
     my $glue_sub_name = $convention . $glue_sub_suffix;
 
@@ -534,7 +569,7 @@ sub DeclareSub {
       or croak "Unsupported calling convention: \"$convention\"";
 
     return sub {
-	&{$glue_sub}($ptr, map { pack($_, shift) } @arg_type);
+	&{$glue_sub}($ptr, \@arg_type, map { pack($_, shift) } @arg_type);
     };
 }
 
@@ -542,10 +577,12 @@ package ExtUtils::DynaLib::Callback;
 
 use strict;
 use Carp;
-use vars qw($Config);
+use vars qw($Config $CONFIG_TEMPLATE $empty);
 use subs qw(new Ptr DESTROY);
 
-my $empty = "";
+$CONFIG_TEMPLATE =
+  ExtUtils::DynaLib::PTR_TYPE . "pp" . ExtUtils::DynaLib::PTR_TYPE;
+$empty = "";
 
 sub new {
     my $class = shift;
@@ -554,7 +591,7 @@ sub new {
     my ($codeptr, $ret_type, $arg_type, @arg_type, $func);
     for ($index = 0; $index <= $#{$Config}; $index++) {
 	($codeptr, $ret_type, $arg_type, $func)
-	    = unpack("IppI", $Config->[$index]);
+	    = unpack($CONFIG_TEMPLATE, $Config->[$index]);
 	last unless $codeptr;
     }
     if ($index > $#{$Config}) {
@@ -571,7 +608,7 @@ sub new {
     }
     $arg_type = join('', @arg_type);
     unshift @$self, $codeptr, $ret_type, $arg_type, $func, $index;
-    $Config->[$index] = pack("IppI", @$self);
+    $Config->[$index] = pack($CONFIG_TEMPLATE, @$self);
     return bless $self, $class;
 }
 
@@ -583,8 +620,9 @@ sub DESTROY {
     my $self = shift;
     my ($codeptr, $ret_type, $arg_type, $func, $index)
 	= @$self;
-    $codeptr = 0;
-    $Config->[$index] = pack("IppI", $codeptr, $empty, $empty, $func);
+    $Config->[$index] = pack($CONFIG_TEMPLATE, 0, $empty, $empty, $func);
 }
 
+package ExtUtils::DynaLib;
 1;
+__END__

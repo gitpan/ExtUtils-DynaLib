@@ -5,6 +5,7 @@ MANIFEST
 Makefile.PL
 README
 README.win32
+alpha.c
 cdecl.c
 hack30.c
 sparc.c

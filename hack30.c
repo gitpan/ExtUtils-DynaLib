@@ -5,17 +5,17 @@
  * It is used when `hack30' is specified explicitly or by default as
  * a calling convention for the ExtUtils::DynaLib module.  The approach
  * is very simpleminded: the perl sub's args are concatenated and cast
- * to an array of 30 integers, and the C function is called as if it
- * expected 30 ints.  (For efficiency, if the Perl args make up only
- * six words or less, the C function is instead called as if it expected
- * six ints.)
+ * to an array of 30 long integers, and the C function is called as if it
+ * expected 30 longs.  (For efficiency, if the Perl args make up only
+ * six longs or less, the C function is instead called as if it expected
+ * six longs.)
  *
  * This method runs into problems if the C function
  *
- * - takes more arguments than can fit in the integer array,
+ * - takes more arguments than can fit in the array,
  *
- * - takes some non-integer arguments on a system that passes them
- *   differently from ints, or
+ * - takes some non-long arguments on a system that passes them
+ *   differently from longs, or
  *
  * - cares how many arguments it was passed.  This appears to crash
  *   certain Win32 functions including RegisterClassA().
@@ -35,20 +35,19 @@ void *func;
   void *arg_scalar;
   int i = 1;
   int nbytes = 0;
-  int pseu[30];
+  long pseu[30];
   int check_len;
 
-  for (i = 1; i < items; i++) {
+  for (i = DYNALIB_ARGSTART; i < items; i++) {
     arg_scalar = SvPV(ST(i), arg_len);
     check_len = nbytes + arg_len;
     if (check_len > sizeof pseu) {
-      croak("Too many arguments.  The hack30 calling convention accepts up to 30 int-size arguments.");
+      croak("Too many arguments.  The hack30 calling convention accepts up to 30 long-int-size arguments.");
     }
-    Copy(arg_scalar, &((char *) (&pseu[0]))[nbytes],
-	 arg_len, char);
+    Copy(arg_scalar, &((char *) (&pseu[0]))[nbytes], arg_len, char);
     nbytes = check_len;
   }
-  if (nbytes <= 6 * sizeof (int)) {
+  if (nbytes <= 6 * sizeof (long)) {
     return (*((int (*)()) func))
       (pseu[0], pseu[1], pseu[2], pseu[3], pseu[4], pseu[5]);
   }
@@ -61,4 +60,4 @@ void *func;
 }
 
 #define hack30_CALL(func, type)						\
-    ((*((type (*)(I32, I32, void *)) hack30_pray))(ax,items,func))
+    ((*((type (*)()) hack30_pray))(ax,items,func))

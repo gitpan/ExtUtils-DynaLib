@@ -18,12 +18,15 @@
 #include <malloc.h>
 #endif
 
+#ifdef __BORLANDC__
+#include <signal.h>
+#endif
+
 I32 a[] = { 225437, 616282, 3853003, 899434198, 86381619,
 	    16556758, 94159, 4893126, 77778212 };
 
 int grows_downward;
 int one_by_one = 1;
-int subtract_current = 0;
 int reverse = 0;
 int do_reverse = 0;
 int args_size[2];
@@ -86,7 +89,6 @@ int do_one_arg(x)
   }
   else {
     arg = (char *) alloca(sizeof a) + do_adjust;
-    if (subtract_current) arg -= args_size[0];
     for (i = 0; i < 9; i++) {
       Copy(&a[do_reverse ? 8-i : i], arg, sizeof (I32), char);
       arg += sizeof (I32);
@@ -113,7 +115,6 @@ int do_three_args(x, y, z)
   }
   else {
     arg = (char *) alloca(sizeof a) + do_adjust;
-    if (subtract_current) arg -= args_size[1];
     for (i = 0; i < 9; i++) {
       Copy(&a[do_reverse ? 8-i : i], arg, sizeof (I32), char);
       arg += sizeof (I32);
@@ -149,11 +150,6 @@ int main(argc, argv, env)
   }
   three_args = do_three_args(0, NULL, 0.0);
   if (! one_arg || ! three_args) {
-    if (adjust[1] - adjust[0] == (grows_downward ? 1 : -1) * (args_size[1] - args_size[0])) {
-      subtract_current = 1;
-      one_arg = do_one_arg(NULL);
-      three_args = do_three_args(0, NULL, 0.0);
-    }
     if (adjust[0] != 0 && adjust[0] == adjust[1]) {
       do_adjust = adjust[0];
       one_arg = do_one_arg(NULL);
@@ -182,7 +178,6 @@ int main(argc, argv, env)
     fprintf(fp, "#include <malloc.h>\n");
 #endif
     fprintf(fp, "#define CDECL_ONE_BY_ONE %d\n", one_by_one);
-    fprintf(fp, "#define CDECL_SUBTRACT_CURRENT %d\n", subtract_current);
     fprintf(fp, "#define CDECL_ADJUST %d\n", do_adjust);
     fprintf(fp, "#define CDECL_REVERSE %d\n", do_reverse);
     fclose(fp);
